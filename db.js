@@ -5,24 +5,29 @@ console.log("🟡 Initialisation MySQL…");
 // =========================
 // 🔍 DEBUG ENV (TEMPORAIRE)
 // =========================
-console.log("🔎 MYSQLHOST =", process.env.MYSQLHOST);
-console.log("🔎 MYSQLUSER =", process.env.MYSQLUSER);
-console.log("🔎 MYSQLDATABASE =", process.env.MYSQLDATABASE);
-console.log("🔎 MYSQLPORT =", process.env.MYSQLPORT);
+console.log("🧪 ENV CHECK", {
+  MYSQL_HOST: process.env.MYSQL_HOST,
+  MYSQL_PORT: process.env.MYSQL_PORT,
+  MYSQL_USER: process.env.MYSQL_USER,
+  MYSQL_DATABASE: process.env.MYSQL_DATABASE,
+});
+
 
 // =========================
 // MYSQL CONNECTION (Railway)
 // =========================
 
 const db = mysql.createPool({
-  host: process.env.MYSQL_HOST,
+  host: process.env.MYSQL_HOST,       // ❌ PAS de || "localhost"
+  port: Number(process.env.MYSQL_PORT),
   user: process.env.MYSQL_USER,
   password: process.env.MYSQL_PASSWORD,
   database: process.env.MYSQL_DATABASE,
-  port: process.env.MYSQL_PORT,
   waitForConnections: true,
   connectionLimit: 10,
 });
+
+module.exports = db;
 
 
 console.log("✅ MySQL pool créé");
