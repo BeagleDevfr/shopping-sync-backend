@@ -17,7 +17,19 @@ const PUBLIC_BASE_URL = process.env.PUBLIC_BASE_URL;
 // =========================
 const app = express();
 app.use(express.json());
-app.use(cors({ origin: true, credentials: true }));
+app.use(cors({
+  origin: [
+    "http://localhost:8100",
+    "https://shoppinglist.netlify.app"
+  ],
+  methods: ["GET", "POST", "PUT", "DELETE", "OPTIONS"],
+  allowedHeaders: ["Content-Type", "Authorization"],
+  credentials: true
+}));
+
+// 🔥 IMPORTANT POUR LE PREFLIGHT
+app.options("*", cors());
+
 
 app.use((req, _res, next) => {
   console.log("➡️ HTTP", req.method, req.url);
