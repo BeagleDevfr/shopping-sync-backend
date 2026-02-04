@@ -20,13 +20,16 @@ app.use(express.json());
 app.use(cors({
   origin: [
     "http://localhost:8100",
-    "https://shoppinglist.netlify.app"
+    "https://shoppinglist.netlify.app",
   ],
-  credentials: true
+  methods: ["GET", "POST", "PUT", "DELETE", "OPTIONS"],
+  allowedHeaders: ["Content-Type", "Authorization"],
+  credentials: true,
 }));
 app.options("*", cors());
 
-app.get("/", (_req, res) => res.send("OK"));
+// healthcheck Railway
+app.get("/", (_req, res) => res.status(200).send("OK"));
 
 const server = http.createServer(app);
 
@@ -34,7 +37,13 @@ const server = http.createServer(app);
 // SOCKET.IO
 // =========================
 const io = new Server(server, {
-  cors: { origin: true, credentials: true }
+  cors: {
+    origin: [
+      "http://localhost:8100",
+      "https://shoppinglist.netlify.app",
+    ],
+    credentials: true,
+  },
 });
 
 // =========================
@@ -47,7 +56,7 @@ const db = mysql.createPool({
   password: process.env.MYSQL_PASSWORD,
   database: process.env.MYSQL_DATABASE,
   waitForConnections: true,
-  connectionLimit: 10
+  connectionLimit: 10,
 });
 
 // =========================
@@ -60,7 +69,7 @@ async function initDb() {
   await conn.execute(`
     CREATE TABLE IF NOT EXISTS lists (
       id VARCHAR(16) PRIMARY KEY,
-      name VARCHAR(255),
+      name VARCHAR(255) NOT NULL,
       created_at BIGINT,
       updated_at BIGINT
     )
@@ -69,19 +78,21 @@ async function initDb() {
   await conn.execute(`
     CREATE TABLE IF NOT EXISTS items (
       id VARCHAR(32) PRIMARY KEY,
-      list_id VARCHAR(16),
-      name VARCHAR(255),
+      list_id VARCHAR(16) NOT NULL,
+      name VARCHAR(255) NOT NULL,
       checked TINYINT DEFAULT 0,
       category VARCHAR(50),
       added_by JSON,
       updated_at BIGINT,
-      FOREIGN KEY (list_id) REFERENCES lists(id) ON DELETE CASCADE
+      FOREIGN KEY (list_id) REFERENCES lists(id)
+        ON DELETE CASCADE
     )
   `);
 
   conn.release();
   console.log("✅ Tables MySQL ready");
 }
+
 initDb().catch(err => {
   console.error("❌ DB INIT FAILED", err);
   process.exit(1);
@@ -91,27 +102,37 @@ initDb().catch(err => {
 // UTILS
 // =========================
 const now = () => Date.now();
-const safe = (v, m = 80) => typeof v === "string" ? v.trim().slice(0, m) : "";
+const safe = (v, m = 80) =>
+  typeof v === "string" ? v.trim().slice(0, m) : "";
+
 const createShareId = () => nanoid(7).toUpperCase();
 
 // =========================
-// REST
+// REST API
 // =========================
 app.post("/lists", async (req, res) => {
-  const name = safe(req.body?.name, 40) || "Liste partagée";
-  const id = createShareId();
-  const ts = now();
+  try {
+    const name = safe(req.body?.name, 40) || "Liste partagée";
+    const shareId = createShareId();
+    const ts = now();
 
-  await db.execute(
-    `INSERT INTO lists (id, name, created_at, updated_at) VALUES (?, ?, ?, ?)`,
-    [id, name, ts, ts]
-  );
+    console.log("📦 CREATE LIST", shareId, name);
 
-  res.json({ shareId: id });
+    await db.execute(
+      `INSERT INTO lists (id, name, created_at, updated_at)
+       VALUES (?, ?, ?, ?)`,
+      [shareId, name, ts, ts]
+    );
+
+    res.json({ shareId });
+  } catch (err) {
+    console.error("❌ CREATE LIST FAILED", err);
+    res.status(500).json({ error: "CREATE_LIST_FAILED" });
+  }
 });
 
 app.get("/lists/:shareId", async (req, res) => {
-  const shareId = req.params.shareId.toUpperCase();
+  const shareId = String(req.params.shareId || "").toUpperCase();
 
   const [[list]] = await db.execute(
     `SELECT * FROM lists WHERE id = ?`,
@@ -131,20 +152,23 @@ app.get("/lists/:shareId", async (req, res) => {
       name: i.name,
       checked: !!i.checked,
       category: i.category,
-      addedBy: i.added_by ? JSON.parse(i.added_by) : null
-    }))
+      addedBy: i.added_by ? JSON.parse(i.added_by) : null,
+      updatedAt: i.updated_at,
+    })),
   });
 });
 
 // =========================
-// SOCKET EVENTS (TOUT ICI)
+// SOCKET EVENTS
 // =========================
 io.on("connection", (socket) => {
   console.log("✅ socket connected", socket.id);
 
   socket.on("JOIN_LIST", async ({ shareId }) => {
-    shareId = shareId.toUpperCase();
+    shareId = String(shareId || "").toUpperCase();
     socket.join(shareId);
+
+    console.log("👥 JOIN_LIST", shareId);
 
     const [[list]] = await db.execute(
       `SELECT * FROM lists WHERE id = ?`,
@@ -152,7 +176,7 @@ io.on("connection", (socket) => {
     );
 
     const [items] = await db.execute(
-      `SELECT * FROM items WHERE list_id = ?`,
+      `SELECT * FROM items WHERE list_id = ? ORDER BY updated_at DESC`,
       [shareId]
     );
 
@@ -165,40 +189,52 @@ io.on("connection", (socket) => {
           name: i.name,
           checked: !!i.checked,
           category: i.category,
-          addedBy: i.added_by ? JSON.parse(i.added_by) : null
-        }))
-      }
+          addedBy: i.added_by ? JSON.parse(i.added_by) : null,
+        })),
+      },
     });
   });
 
   socket.on("ADD_ITEM", async ({ shareId, item }) => {
     const ts = now();
 
+    const addedBy =
+      item.addedBy && typeof item.addedBy === "object"
+        ? JSON.stringify(item.addedBy)
+        : null;
+
     await db.execute(
-      `INSERT INTO items VALUES (?, ?, ?, ?, ?, ?, ?)`,
+      `INSERT INTO items
+       (id, list_id, name, checked, category, added_by, updated_at)
+       VALUES (?, ?, ?, ?, ?, ?, ?)`,
       [
         item.id,
         shareId,
         item.name,
         item.checked ? 1 : 0,
         item.category,
-        JSON.stringify(item.addedBy),
-        ts
+        addedBy,
+        ts,
       ]
     );
 
     io.to(shareId).emit("ITEM_ADDED", {
-      item: { ...item, checked: !!item.checked }
+      item: { ...item, checked: !!item.checked },
     });
   });
 
   socket.on("TOGGLE_ITEM", async ({ shareId, itemId, checked }) => {
     await db.execute(
-      `UPDATE items SET checked = ?, updated_at = ? WHERE id = ? AND list_id = ?`,
+      `UPDATE items
+       SET checked = ?, updated_at = ?
+       WHERE id = ? AND list_id = ?`,
       [checked ? 1 : 0, now(), itemId, shareId]
     );
 
-    io.to(shareId).emit("ITEM_TOGGLED", { itemId, checked });
+    io.to(shareId).emit("ITEM_TOGGLED", {
+      itemId,
+      checked: !!checked,
+    });
   });
 
   socket.on("REMOVE_ITEM", async ({ shareId, itemId }) => {
