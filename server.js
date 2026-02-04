@@ -7,9 +7,9 @@ const { nanoid } = require("nanoid");
 const mysql = require("mysql2/promise");
 
 // =========================
-// CONFIG (IMPORTANT RAILWAY)
+// CONFIG (RAILWAY SAFE)
 // =========================
-const PORT = Number(process.env.PORT); // ⚠️ PAS de fallback
+const PORT = Number(process.env.PORT) || 8080;
 const PUBLIC_BASE_URL = process.env.PUBLIC_BASE_URL;
 
 // =========================
@@ -19,8 +19,8 @@ const app = express();
 app.use(express.json());
 app.use(cors({ origin: true, credentials: true }));
 
-// 🔥 HEALTHCHECK
-app.get("/", (req, res) => {
+// 🔥 HEALTHCHECK (OBLIGATOIRE POUR RAILWAY)
+app.get("/", (_req, res) => {
   res.status(200).send("OK");
 });
 
@@ -117,7 +117,7 @@ app.post("/lists", async (req, res) => {
 
     await db.execute(
       `INSERT INTO lists (id, name, created_at, updated_at)
-       VALUES (?, ?, ?, ?)`,
+       VALUES (?, ?, ?, ?)` ,
       [shareId, name, ts, ts]
     );
 
@@ -168,7 +168,7 @@ app.get("/lists/:shareId", async (req, res) => {
 io.on("connection", (socket) => {
   console.log("✅ connected:", socket.id);
 
-  socket.on("JOIN_LIST", async ({ shareId }) => {
+  socket.on("JOIN_LIST", async ({ shareId }, ack) => {
     shareId = String(shareId || "").toUpperCase();
     socket.join(shareId);
 
@@ -188,6 +188,8 @@ io.on("connection", (socket) => {
         })),
       },
     });
+
+    ack?.({ ok: true });
   });
 
   socket.on("ADD_ITEM", async ({ shareId, item }) => {
@@ -210,6 +212,27 @@ io.on("connection", (socket) => {
     io.to(shareId).emit("ITEM_ADDED", {
       item: { ...item, checked: !!item.checked },
     });
+  });
+
+  socket.on("TOGGLE_ITEM", async ({ shareId, itemId, checked }) => {
+    await db.execute(
+      `UPDATE items SET checked = ?, updated_at = ? WHERE id = ? AND list_id = ?`,
+      [checked ? 1 : 0, now(), itemId, shareId]
+    );
+
+    io.to(shareId).emit("ITEM_TOGGLED", {
+      itemId,
+      checked: !!checked,
+    });
+  });
+
+  socket.on("REMOVE_ITEM", async ({ shareId, itemId }) => {
+    await db.execute(
+      `DELETE FROM items WHERE id = ? AND list_id = ?`,
+      [itemId, shareId]
+    );
+
+    io.to(shareId).emit("ITEM_REMOVED", { itemId });
   });
 });
 
