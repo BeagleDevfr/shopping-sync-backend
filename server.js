@@ -1,3 +1,21 @@
+function parseAddedBy(value) {
+  if (!value) return null;
+
+  // déjà un objet
+  if (typeof value === "object") return value;
+
+  // string JSON valide
+  if (typeof value === "string") {
+    try {
+      return JSON.parse(value);
+    } catch {
+      return null;
+    }
+  }
+
+  return null;
+}
+
 // server.js
 const express = require("express");
 const cors = require("cors");
@@ -152,7 +170,7 @@ app.get("/lists/:shareId", async (req, res) => {
       name: i.name,
       checked: !!i.checked,
       category: i.category,
-      addedBy: i.added_by ? JSON.parse(i.added_by) : null,
+      addedBy: parseAddedBy(i.added_by),
       updatedAt: i.updated_at,
     })),
   });
@@ -189,7 +207,7 @@ io.on("connection", (socket) => {
           name: i.name,
           checked: !!i.checked,
           category: i.category,
-          addedBy: i.added_by ? JSON.parse(i.added_by) : null,
+          addedBy: parseAddedBy(i.added_by),
         })),
       },
     });
