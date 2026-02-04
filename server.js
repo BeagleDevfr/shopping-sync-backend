@@ -7,27 +7,27 @@ const { nanoid } = require("nanoid");
 const mysql = require("mysql2/promise");
 
 // =========================
-// CONFIG
+// CONFIG (IMPORTANT RAILWAY)
 // =========================
-const PORT = Number(process.env.PORT);
+const PORT = Number(process.env.PORT); // ⚠️ PAS de fallback
 const PUBLIC_BASE_URL = process.env.PUBLIC_BASE_URL;
 
 // =========================
-// APP
+// APP + HTTP
 // =========================
 const app = express();
 app.use(express.json());
-app.use(cors({ origin: true }));
+app.use(cors({ origin: true, credentials: true }));
 
-// HEALTHCHECK
-app.get("/", (_, res) => res.send("OK"));
+app.use((req, _res, next) => {
+  console.log("➡️ HTTP", req.method, req.url);
+  next();
+});
 
-// ✅ BONUS : éviter "Cannot GET /lists"
-app.get("/lists", (_req, res) => {
-  res.status(405).json({
-    error: "USE_POST_NOT_GET",
-    message: "Use POST /lists to create a shared list",
-  });
+
+// 🔥 HEALTHCHECK
+app.get("/", (req, res) => {
+  res.status(200).send("OK");
 });
 
 const server = http.createServer(app);
@@ -36,11 +36,11 @@ const server = http.createServer(app);
 // SOCKET.IO
 // =========================
 const io = new Server(server, {
-  cors: { origin: true },
+  cors: { origin: true, credentials: true },
 });
 
 // =========================
-// MYSQL
+// MYSQL POOL
 // =========================
 const db = mysql.createPool({
   host: process.env.MYSQL_HOST,
@@ -48,20 +48,23 @@ const db = mysql.createPool({
   user: process.env.MYSQL_USER,
   password: process.env.MYSQL_PASSWORD,
   database: process.env.MYSQL_DATABASE,
+  waitForConnections: true,
+  connectionLimit: 10,
 });
 
 // =========================
 // INIT DB
 // =========================
-(async () => {
+async function initDb() {
   console.log("🟡 Init DB…");
+
   const conn = await db.getConnection();
   console.log("✅ MySQL connected");
 
   await conn.execute(`
     CREATE TABLE IF NOT EXISTS lists (
       id VARCHAR(16) PRIMARY KEY,
-      name VARCHAR(255),
+      name VARCHAR(255) NOT NULL,
       created_at BIGINT,
       updated_at BIGINT
     )
@@ -70,8 +73,8 @@ const db = mysql.createPool({
   await conn.execute(`
     CREATE TABLE IF NOT EXISTS items (
       id VARCHAR(32) PRIMARY KEY,
-      list_id VARCHAR(16),
-      name VARCHAR(255),
+      list_id VARCHAR(16) NOT NULL,
+      name VARCHAR(255) NOT NULL,
       checked TINYINT DEFAULT 0,
       category VARCHAR(50),
       added_by JSON,
@@ -83,20 +86,38 @@ const db = mysql.createPool({
 
   conn.release();
   console.log("✅ Tables MySQL ready");
-})();
+}
+
+initDb().catch(err => {
+  console.error("❌ DB INIT FAILED");
+  console.error(err);
+  process.exit(1);
+});
 
 // =========================
 // UTILS
 // =========================
 const now = () => Date.now();
+const safeString = (x, max = 80) =>
+  typeof x === "string" ? x.trim().slice(0, max) : "";
+
 const createShareId = () => nanoid(7).toUpperCase();
 
+function getPublicBaseUrl(req) {
+  if (PUBLIC_BASE_URL) return PUBLIC_BASE_URL;
+  const proto = req.headers["x-forwarded-proto"] || "http";
+  const host = req.headers["host"];
+  return `${proto}://${host}`;
+}
+
 // =========================
-// REST
+// REST API
 // =========================
 app.post("/lists", async (req, res) => {
+  console.log("🔥 POST /lists HIT", req.body);
+
   try {
-    const name = req.body?.name || "Liste partagée";
+    const name = safeString(req.body?.name, 40) || "Liste partagée";
     const shareId = createShareId();
     const ts = now();
 
@@ -106,38 +127,95 @@ app.post("/lists", async (req, res) => {
       [shareId, name, ts, ts]
     );
 
-    const baseUrl = PUBLIC_BASE_URL || `${req.protocol}://${req.get("host")}`;
-
-    res.json({
-      shareId,
-      joinUrl: `${baseUrl}/join/${shareId}`,
-    });
+    res.json({ shareId });
   } catch (err) {
-    console.error(err);
+    console.error("❌ CREATE LIST FAILED", err);
     res.status(500).json({ error: "CREATE_LIST_FAILED" });
   }
 });
 
+
 app.get("/lists/:shareId", async (req, res) => {
-  const shareId = req.params.shareId.toUpperCase();
+  const shareId = String(req.params.shareId || "").toUpperCase();
 
   const [[list]] = await db.execute(
-    "SELECT * FROM lists WHERE id = ?",
+    `SELECT * FROM lists WHERE id = ?`,
     [shareId]
   );
 
   if (!list) return res.status(404).json({ error: "NOT_FOUND" });
 
   const [items] = await db.execute(
-    "SELECT * FROM items WHERE list_id = ?",
+    `SELECT * FROM items WHERE list_id = ? ORDER BY updated_at DESC`,
     [shareId]
   );
 
-  res.json({ list, items });
+  res.json({
+    list,
+    items: items.map(i => ({
+      id: i.id,
+      name: i.name,
+      checked: !!i.checked,
+      category: i.category,
+      addedBy: i.added_by ? JSON.parse(i.added_by) : null,
+      updatedAt: i.updated_at,
+    })),
+  });
 });
 
 // =========================
-// START
+// SOCKET EVENTS
+// =========================
+io.on("connection", (socket) => {
+  console.log("✅ connected:", socket.id);
+
+  socket.on("JOIN_LIST", async ({ shareId }) => {
+    shareId = String(shareId || "").toUpperCase();
+    socket.join(shareId);
+
+    const [items] = await db.execute(
+      `SELECT * FROM items WHERE list_id = ? ORDER BY updated_at DESC`,
+      [shareId]
+    );
+
+    socket.emit("SNAPSHOT", {
+      list: {
+        items: items.map(i => ({
+          id: i.id,
+          name: i.name,
+          checked: !!i.checked,
+          category: i.category,
+          addedBy: i.added_by ? JSON.parse(i.added_by) : null,
+        })),
+      },
+    });
+  });
+
+  socket.on("ADD_ITEM", async ({ shareId, item }) => {
+    const ts = now();
+
+    await db.execute(
+      `INSERT INTO items (id, list_id, name, checked, category, added_by, updated_at)
+       VALUES (?, ?, ?, ?, ?, ?, ?)`,
+      [
+        item.id,
+        shareId,
+        item.name,
+        item.checked ? 1 : 0,
+        item.category,
+        JSON.stringify(item.addedBy),
+        ts,
+      ]
+    );
+
+    io.to(shareId).emit("ITEM_ADDED", {
+      item: { ...item, checked: !!item.checked },
+    });
+  });
+});
+
+// =========================
+// START (NE DOIT JAMAIS S’ARRÊTER)
 // =========================
 server.listen(PORT, "0.0.0.0", () => {
   console.log(`🚀 Backend running on port ${PORT}`);
