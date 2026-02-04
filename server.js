@@ -211,6 +211,6 @@ io.on("connection", (socket) => {
 // =========================
 // START (NE DOIT JAMAIS S’ARRÊTER)
 // =========================
-server.listen(PORT, () => {
+server.listen(PORT, "0.0.0.0", () => {
   console.log(`🚀 Backend running on port ${PORT}`);
 });
