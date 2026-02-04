@@ -19,6 +19,11 @@ const app = express();
 app.use(express.json());
 app.use(cors({ origin: true, credentials: true }));
 
+// 🔥 HEALTHCHECK
+app.get("/", (req, res) => {
+  res.status(200).send("OK");
+});
+
 const server = http.createServer(app);
 
 // =========================
