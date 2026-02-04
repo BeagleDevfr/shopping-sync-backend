@@ -181,27 +181,37 @@ app.get("/lists/:shareId", async (req, res) => {
 io.on("connection", (socket) => {
   console.log("✅ connected:", socket.id);
 
-  socket.on("JOIN_LIST", async ({ shareId }) => {
-    shareId = String(shareId || "").toUpperCase();
-    socket.join(shareId);
+  ssocket.on("JOIN_LIST", async ({ shareId }) => {
+  shareId = String(shareId || "").toUpperCase();
+  socket.join(shareId);
 
-    const [items] = await db.execute(
-      `SELECT * FROM items WHERE list_id = ? ORDER BY updated_at DESC`,
-      [shareId]
-    );
+  console.log("👥 JOIN_LIST", shareId);
 
-    socket.emit("SNAPSHOT", {
-      list: {
-        items: items.map(i => ({
-          id: i.id,
-          name: i.name,
-          checked: !!i.checked,
-          category: i.category,
-          addedBy: i.added_by ? JSON.parse(i.added_by) : null,
-        })),
-      },
-    });
+  const [[list]] = await db.execute(
+    `SELECT * FROM lists WHERE id = ?`,
+    [shareId]
+  );
+
+  const [items] = await db.execute(
+    `SELECT * FROM items WHERE list_id = ? ORDER BY updated_at DESC`,
+    [shareId]
+  );
+
+  socket.emit("SNAPSHOT", {
+    list: {
+      shareId,
+      name: list?.name ?? "Liste partagée",
+      items: items.map(i => ({
+        id: i.id,
+        name: i.name,
+        checked: !!i.checked,
+        category: i.category,
+        addedBy: i.added_by ? JSON.parse(i.added_by) : null,
+      })),
+    },
   });
+});
+
 
   socket.on("ADD_ITEM", async ({ shareId, item }) => {
     const ts = now();
@@ -225,6 +235,52 @@ io.on("connection", (socket) => {
     });
   });
 });
+
+
+socket.on("TOGGLE_ITEM", async ({ shareId, itemId, checked }) => {
+  shareId = String(shareId || "").toUpperCase();
+  itemId = String(itemId || "");
+
+  console.log("🟡 TOGGLE_ITEM", shareId, itemId, checked);
+
+  await db.execute(
+    `UPDATE items
+     SET checked = ?, updated_at = ?
+     WHERE id = ? AND list_id = ?`,
+    [checked ? 1 : 0, Date.now(), itemId, shareId]
+  );
+
+  io.to(shareId).emit("ITEM_TOGGLED", {
+    itemId,
+    checked: !!checked,
+  });
+});
+
+socket.on("REMOVE_ITEM", async ({ shareId, itemId }) => {
+  shareId = String(shareId || "").toUpperCase();
+  itemId = String(itemId || "");
+
+  console.log("🔴 REMOVE_ITEM", shareId, itemId);
+
+  await db.execute(
+    `DELETE FROM items WHERE id = ? AND list_id = ?`,
+    [itemId, shareId]
+  );
+
+  io.to(shareId).emit("ITEM_REMOVED", { itemId });
+});
+
+
+
+
+
+
+
+
+
+
+
+
 
 // =========================
 // START (NE DOIT JAMAIS S’ARRÊTER)
