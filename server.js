@@ -146,10 +146,7 @@ app.post("/lists", async (req, res) => {
   try {
     const name = safe(req.body?.name, 40) || "Liste partagée";
     const shareId = nanoid(7).toUpperCase();
-    const ts = now();
-
-    console.log("📦 CREATE LIST", shareId, name);
-    console.log("👤 USER PAYLOAD:", req.body?.user);
+    const ts = Date.now();
 
     await db.execute(
       `INSERT INTO lists (id, name, created_at, updated_at)
@@ -159,15 +156,14 @@ app.post("/lists", async (req, res) => {
 
     const user = req.body?.user;
 
-    // ✅ INSERT MEMBER SEULEMENT SI USER VALIDE
+    // ⚠️ PROTECTION TOTALE
     if (user && typeof user.id === "string") {
       await db.execute(
-        `INSERT INTO list_members (id, list_id, user_id, pseudo, joined_at)
+        `INSERT IGNORE INTO list_members
+         (id, list_id, user_id, pseudo, joined_at)
          VALUES (?, ?, ?, ?, ?)`,
         [nanoid(), shareId, user.id, user.pseudo ?? null, ts]
       );
-    } else {
-      console.warn("⚠️ LIST CREATED WITHOUT USER");
     }
 
     res.json({ shareId });
@@ -176,6 +172,7 @@ app.post("/lists", async (req, res) => {
     res.status(500).json({ error: "CREATE_LIST_FAILED" });
   }
 });
+
 
 
 app.post("/lists/:shareId/join", async (req, res) => {
