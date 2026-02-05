@@ -40,7 +40,9 @@ const ALLOWED_ORIGINS = [
   "https://shoppinglist.netlify.app",
   "capacitor://localhost",
   "http://localhost",
+  "https://localhost", // 🔥 ANDROID CAPACITOR
 ];
+
 
 // =========================
 // APP
