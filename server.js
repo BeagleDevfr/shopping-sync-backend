@@ -14,6 +14,7 @@ function parseAddedBy(value) {
   }
   return null;
 }
+const { nanoid } = require("nanoid");
 
 const now = () => Date.now();
 const safe = (v, m = 80) =>
@@ -148,6 +149,8 @@ app.post("/lists", async (req, res) => {
     const shareId = nanoid(7).toUpperCase();
     const ts = now();
 
+    const user = req.body?.user; // { id, pseudo }
+
     console.log("📦 CREATE LIST", shareId, name);
 
     await db.execute(
@@ -156,12 +159,45 @@ app.post("/lists", async (req, res) => {
       [shareId, name, ts, ts]
     );
 
+    // 👤 AJOUT DU CRÉATEUR COMME MEMBRE
+    if (user?.id) {
+      await db.execute(
+        `INSERT INTO list_members (id, list_id, user_id, pseudo, joined_at)
+         VALUES (?, ?, ?, ?, ?)`,
+        [nanoid(), shareId, user.id, user.pseudo ?? null, ts]
+      );
+    }
+
     res.json({ shareId });
   } catch (err) {
     console.error("❌ CREATE LIST FAILED", err);
     res.status(500).json({ error: "CREATE_LIST_FAILED" });
   }
 });
+
+app.post("/lists/:shareId/join", async (req, res) => {
+  try {
+    const shareId = req.params.shareId.toUpperCase();
+    const user = req.body?.user; // { id, pseudo }
+
+    if (!user?.id) {
+      return res.status(400).json({ error: "USER_REQUIRED" });
+    }
+
+    await db.execute(
+      `INSERT IGNORE INTO list_members
+       (id, list_id, user_id, pseudo, joined_at)
+       VALUES (?, ?, ?, ?, ?)`,
+      [nanoid(), shareId, user.id, user.pseudo ?? null, now()]
+    );
+
+    res.json({ ok: true });
+  } catch (err) {
+    console.error("❌ JOIN LIST FAILED", err);
+    res.status(500).json({ error: "JOIN_LIST_FAILED" });
+  }
+});
+
 
 app.get("/lists/:shareId", async (req, res) => {
   const shareId = String(req.params.shareId || "").toUpperCase();
@@ -275,6 +311,34 @@ io.on("connection", socket => {
     io.to(shareId).emit("ITEM_REMOVED", { itemId });
   });
 });
+
+
+app.get('/lists/:shareId/members', async (req, res) => {
+  try {
+    const shareId = req.params.shareId.toUpperCase();
+
+    const [rows] = await db.execute(
+      `SELECT user_id, pseudo, joined_at
+       FROM list_members
+       WHERE list_id = ?
+       ORDER BY joined_at ASC`,
+      [shareId]
+    );
+
+    res.json({
+      members: rows.map(r => ({
+        id: r.user_id,
+        pseudo: r.pseudo ?? 'Inconnu',
+        joinedAt: r.joined_at,
+      })),
+    });
+  } catch (err) {
+    console.error('❌ GET MEMBERS FAILED', err);
+    res.status(500).json({ error: 'GET_MEMBERS_FAILED' });
+  }
+});
+
+
 
 // =========================
 // START
