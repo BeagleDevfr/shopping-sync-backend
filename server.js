@@ -14,7 +14,6 @@ function parseAddedBy(value) {
   }
   return null;
 }
-const { nanoid } = require("nanoid");
 
 const now = () => Date.now();
 const safe = (v, m = 80) =>
