@@ -1,10 +1,10 @@
+// =========================
+// UTILS
+// =========================
 function parseAddedBy(value) {
   if (!value) return null;
-
-  // déjà un objet
   if (typeof value === "object") return value;
 
-  // string JSON valide
   if (typeof value === "string") {
     try {
       return JSON.parse(value);
@@ -12,12 +12,16 @@ function parseAddedBy(value) {
       return null;
     }
   }
-
   return null;
 }
 
+const now = () => Date.now();
+const safe = (v, m = 80) =>
+  typeof v === "string" ? v.trim().slice(0, m) : "";
 
-// server.js
+// =========================
+// IMPORTS
+// =========================
 const express = require("express");
 const cors = require("cors");
 const http = require("http");
@@ -28,26 +32,45 @@ const mysql = require("mysql2/promise");
 // =========================
 // CONFIG
 // =========================
-const PORT = Number(process.env.PORT);
-const PUBLIC_BASE_URL = process.env.PUBLIC_BASE_URL;
+const PORT = Number(process.env.PORT || 8080);
+
+// ⚠️ ORIGINES AUTORISÉES (WEB + ANDROID)
+const ALLOWED_ORIGINS = [
+  "http://localhost:8100",
+  "https://shoppinglist.netlify.app",
+  "capacitor://localhost",
+  "http://localhost",
+];
 
 // =========================
 // APP
 // =========================
 const app = express();
 app.use(express.json());
-app.use(cors({
-  origin: [
-    "http://localhost:8100",
-    "https://shoppinglist.netlify.app",
-  ],
-  methods: ["GET", "POST", "PUT", "DELETE", "OPTIONS"],
-  allowedHeaders: ["Content-Type", "Authorization"],
-  credentials: true,
-}));
+
+// LOG ORIGIN (DEBUG MOBILE)
+app.use((req, _res, next) => {
+  console.log("🌍 ORIGIN:", req.headers.origin);
+  next();
+});
+
+// CORS GLOBAL
+app.use(
+  cors({
+    origin(origin, callback) {
+      if (!origin) return callback(null, true); // Android WebView
+      if (ALLOWED_ORIGINS.includes(origin)) return callback(null, true);
+
+      console.error("❌ CORS BLOCKED:", origin);
+      callback(new Error("Not allowed by CORS"));
+    },
+    credentials: true,
+  })
+);
+
 app.options("*", cors());
 
-// healthcheck Railway
+// HEALTHCHECK RAILWAY
 app.get("/", (_req, res) => res.status(200).send("OK"));
 
 const server = http.createServer(app);
@@ -57,10 +80,7 @@ const server = http.createServer(app);
 // =========================
 const io = new Server(server, {
   cors: {
-    origin: [
-      "http://localhost:8100",
-      "https://shoppinglist.netlify.app",
-    ],
+    origin: ALLOWED_ORIGINS,
     credentials: true,
   },
 });
@@ -118,21 +138,12 @@ initDb().catch(err => {
 });
 
 // =========================
-// UTILS
-// =========================
-const now = () => Date.now();
-const safe = (v, m = 80) =>
-  typeof v === "string" ? v.trim().slice(0, m) : "";
-
-const createShareId = () => nanoid(7).toUpperCase();
-
-// =========================
 // REST API
 // =========================
 app.post("/lists", async (req, res) => {
   try {
     const name = safe(req.body?.name, 40) || "Liste partagée";
-    const shareId = createShareId();
+    const shareId = nanoid(7).toUpperCase();
     const ts = now();
 
     console.log("📦 CREATE LIST", shareId, name);
@@ -157,6 +168,7 @@ app.get("/lists/:shareId", async (req, res) => {
     `SELECT * FROM lists WHERE id = ?`,
     [shareId]
   );
+
   if (!list) return res.status(404).json({ error: "NOT_FOUND" });
 
   const [items] = await db.execute(
@@ -180,7 +192,7 @@ app.get("/lists/:shareId", async (req, res) => {
 // =========================
 // SOCKET EVENTS
 // =========================
-io.on("connection", (socket) => {
+io.on("connection", socket => {
   console.log("✅ socket connected", socket.id);
 
   socket.on("JOIN_LIST", async ({ shareId }) => {
@@ -216,7 +228,6 @@ io.on("connection", (socket) => {
 
   socket.on("ADD_ITEM", async ({ shareId, item }) => {
     const ts = now();
-
     const addedBy =
       item.addedBy && typeof item.addedBy === "object"
         ? JSON.stringify(item.addedBy)
@@ -250,10 +261,7 @@ io.on("connection", (socket) => {
       [checked ? 1 : 0, now(), itemId, shareId]
     );
 
-    io.to(shareId).emit("ITEM_TOGGLED", {
-      itemId,
-      checked: !!checked,
-    });
+    io.to(shareId).emit("ITEM_TOGGLED", { itemId, checked: !!checked });
   });
 
   socket.on("REMOVE_ITEM", async ({ shareId, itemId }) => {
