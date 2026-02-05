@@ -2,19 +2,6 @@ const mysql = require("mysql2/promise");
 
 console.log("🟡 Initialisation MySQL…");
 
-// =========================
-// 🔍 DEBUG ENV (TEMPORAIRE)
-// =========================
-console.log("🧪 ENV CHECK", {
-  MYSQL_HOST: process.env.MYSQL_HOST,
-  MYSQL_PORT: process.env.MYSQL_PORT,
-  MYSQL_USER: process.env.MYSQL_USER,
-  MYSQL_DATABASE: process.env.MYSQL_DATABASE,
-});
-
-// =========================
-// MYSQL CONNECTION (Railway)
-// =========================
 const db = mysql.createPool({
   host: process.env.MYSQL_HOST,
   port: Number(process.env.MYSQL_PORT),
@@ -25,32 +12,21 @@ const db = mysql.createPool({
   connectionLimit: 10,
 });
 
-console.log("✅ MySQL pool créé");
-
-// =========================
-// TEST CONNEXION
-// =========================
 (async () => {
   try {
     const conn = await db.getConnection();
     console.log("✅ Connexion MySQL OK");
     conn.release();
   } catch (err) {
-    console.error("❌ Connexion MySQL ÉCHOUÉE");
+    console.error("❌ MySQL CONNECTION FAILED");
     console.error(err);
     process.exit(1);
   }
 })();
 
-// =========================
-// INIT TABLES (SOURCE UNIQUE)
-// =========================
 async function initDB() {
-  console.log("🟡 Initialisation des tables MySQL…");
+  console.log("🟡 Initialisation des tables…");
 
-  // =========================
-  // LISTS
-  // =========================
   await db.execute(`
     CREATE TABLE IF NOT EXISTS lists (
       id VARCHAR(16) PRIMARY KEY,
@@ -59,11 +35,7 @@ async function initDB() {
       updated_at BIGINT
     )
   `);
-  console.log("✅ Table lists OK");
 
-  // =========================
-  // ITEMS
-  // =========================
   await db.execute(`
     CREATE TABLE IF NOT EXISTS items (
       id VARCHAR(32) PRIMARY KEY,
@@ -77,11 +49,7 @@ async function initDB() {
         ON DELETE CASCADE
     )
   `);
-  console.log("✅ Table items OK");
 
-  // =========================
-  // 👥 LIST MEMBERS
-  // =========================
   await db.execute(`
     CREATE TABLE IF NOT EXISTS list_members (
       id VARCHAR(32) PRIMARY KEY,
@@ -94,14 +62,12 @@ async function initDB() {
         ON DELETE CASCADE
     )
   `);
-  console.log("✅ Table list_members OK");
 
-  console.log("🎉 Base MySQL prête");
+  console.log("🎉 DB READY");
 }
 
-// ⚠️ APPEL UNIQUE AU DÉMARRAGE
 initDB().catch(err => {
-  console.error("❌ ERREUR INIT DB");
+  console.error("❌ DB INIT FAILED");
   console.error(err);
   process.exit(1);
 });

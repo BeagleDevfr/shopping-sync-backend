@@ -1,3 +1,10 @@
+console.log("DB ENV", {
+  host: process.env.MYSQLHOST,
+  port: process.env.MYSQLPORT,
+  user: process.env.MYSQLUSER,
+  database: process.env.MYSQLDATABASE,
+});
+
 // =========================
 // UTILS
 // =========================
