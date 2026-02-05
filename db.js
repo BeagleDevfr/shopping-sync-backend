@@ -16,7 +16,7 @@ console.log("🧪 ENV CHECK", {
 // MYSQL CONNECTION (Railway)
 // =========================
 const db = mysql.createPool({
-  host: process.env.MYSQL_HOST,       // ❌ PAS de localhost fallback
+  host: process.env.MYSQL_HOST,
   port: Number(process.env.MYSQL_PORT),
   user: process.env.MYSQL_USER,
   password: process.env.MYSQL_PASSWORD,
@@ -43,7 +43,7 @@ console.log("✅ MySQL pool créé");
 })();
 
 // =========================
-// INIT TABLES
+// INIT TABLES (SOURCE UNIQUE)
 // =========================
 async function initDB() {
   console.log("🟡 Initialisation des tables MySQL…");
@@ -80,7 +80,7 @@ async function initDB() {
   console.log("✅ Table items OK");
 
   // =========================
-  // 👥 LIST MEMBERS (NOUVEAU)
+  // 👥 LIST MEMBERS
   // =========================
   await db.execute(`
     CREATE TABLE IF NOT EXISTS list_members (
