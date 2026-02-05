@@ -316,12 +316,21 @@ app.get('/lists/:shareId/members', async (req, res) => {
   try {
     const shareId = req.params.shareId.toUpperCase();
 
+    const [[list]] = await db.execute(
+      `SELECT id FROM lists WHERE share_id = ?`,
+      [shareId]
+    );
+
+    if (!list) {
+      return res.status(404).json({ error: 'LIST_NOT_FOUND' });
+    }
+
     const [rows] = await db.execute(
       `SELECT user_id, pseudo, joined_at
        FROM list_members
        WHERE list_id = ?
        ORDER BY joined_at ASC`,
-      [shareId]
+      [list.id]
     );
 
     res.json({
@@ -338,18 +347,29 @@ app.get('/lists/:shareId/members', async (req, res) => {
 });
 
 
+
 // =========================
 // 👥 MEMBERS COUNT
-// =========================
 app.get('/lists/:shareId/members-count', async (req, res) => {
   try {
     const shareId = req.params.shareId.toUpperCase();
 
+    // 1️⃣ retrouver l'id interne de la liste
+    const [[list]] = await db.execute(
+      `SELECT id FROM lists WHERE share_id = ?`,
+      [shareId]
+    );
+
+    if (!list) {
+      return res.status(404).json({ error: 'LIST_NOT_FOUND' });
+    }
+
+    // 2️⃣ compter les membres
     const [[row]] = await db.execute(
       `SELECT COUNT(*) AS count
        FROM list_members
        WHERE list_id = ?`,
-      [shareId]
+      [list.id]
     );
 
     res.json({ count: row.count });
@@ -358,6 +378,7 @@ app.get('/lists/:shareId/members-count', async (req, res) => {
     res.status(500).json({ error: 'GET_MEMBERS_COUNT_FAILED' });
   }
 });
+
 
 // =========================
 // STARTghjg
