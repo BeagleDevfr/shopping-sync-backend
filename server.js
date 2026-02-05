@@ -338,6 +338,26 @@ app.get('/lists/:shareId/members', async (req, res) => {
 });
 
 
+// =========================
+// 👥 MEMBERS COUNT
+// =========================
+app.get('/lists/:shareId/members-count', async (req, res) => {
+  try {
+    const shareId = req.params.shareId.toUpperCase();
+
+    const [[row]] = await db.execute(
+      `SELECT COUNT(*) AS count
+       FROM list_members
+       WHERE list_id = ?`,
+      [shareId]
+    );
+
+    res.json({ count: row.count });
+  } catch (err) {
+    console.error('❌ GET MEMBERS COUNT FAILED', err);
+    res.status(500).json({ error: 'GET_MEMBERS_COUNT_FAILED' });
+  }
+});
 
 // =========================
 // STARTghjg
