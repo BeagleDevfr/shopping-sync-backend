@@ -122,9 +122,9 @@ async function initDb() {
   console.log("🟡 Init DB…");
   const conn = await db.getConnection();
 
-await conn.execute(`DROP TABLE IF EXISTS list_members`);
-await conn.execute(`DROP TABLE IF EXISTS items`);
-await conn.execute(`DROP TABLE IF EXISTS lists`);
+//await conn.execute(`DROP TABLE IF EXISTS list_members`);
+//await conn.execute(`DROP TABLE IF EXISTS items`);
+//await conn.execute(`DROP TABLE IF EXISTS lists`);
 
 await conn.execute(`
   CREATE TABLE IF NOT EXISTS lists (
@@ -300,30 +300,36 @@ app.get("/lists/:shareId", async (req, res) => {
 // =========================
 // 👥 MEMBERS LIST
 // =========================
-app.get('/lists/:shareId/members', async (req, res) => {
+// =========================
+// GET MEMBERS OF A LIST
+// =========================
+app.get("/lists/:shareId/members", async (req, res) => {
   try {
     const shareId = req.params.shareId.toUpperCase();
 
     const [rows] = await db.execute(
-      `SELECT user_id, pseudo, joined_at
-       FROM list_members
-       WHERE list_id = ?
-       ORDER BY joined_at ASC`,
+      `
+      SELECT user_id, pseudo, joined_at
+      FROM list_members
+      WHERE list_id = ?
+      ORDER BY joined_at ASC
+      `,
       [shareId]
     );
 
-    res.json({
-      members: rows.map(r => ({
-        id: r.user_id,
-        pseudo: r.pseudo ?? 'Inconnu',
-        joinedAt: r.joined_at,
-      })),
-    });
+    const members = rows.map(r => ({
+      id: r.user_id,
+      pseudo: r.pseudo,
+      joinedAt: r.joined_at,
+    }));
+
+    res.json({ members });
   } catch (err) {
-    console.error('❌ GET MEMBERS FAILED', err);
-    res.status(500).json({ error: 'GET_MEMBERS_FAILED' });
+    console.error("❌ GET MEMBERS ERROR", err);
+    res.status(500).json({ error: "SERVER_ERROR" });
   }
 });
+
 
 
 app.get("/lists/:shareId/members-count", async (req, res) => {
