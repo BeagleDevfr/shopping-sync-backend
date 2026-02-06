@@ -23,6 +23,12 @@ function parseAddedBy(value) {
   }
   return null;
 }
+function generateShareId() {
+  return Math.random()
+    .toString(36)
+    .substring(2, 8)
+    .toUpperCase();
+}
 
 const now = () => Date.now();
 const safe = (v, m = 80) =>
@@ -175,7 +181,7 @@ initDb().catch(err => {
 // =========================
 app.post("/lists", async (req, res) => {
   try {
-    const { name, owner } = req.body;
+    const { name, user } = req.body;
 
     const shareId = generateShareId();
     const now = Date.now();
@@ -186,12 +192,13 @@ app.post("/lists", async (req, res) => {
       [shareId, name, now, now]
     );
 
-    // créateur = membre
-    await db.execute(
-      `INSERT INTO list_members (list_id, user_id, pseudo, joined_at)
-       VALUES (?, ?, ?, ?)`,
-      [shareId, owner.id, owner.pseudo, now]
-    );
+    if (user?.id) {
+      await db.execute(
+        `INSERT INTO list_members (list_id, user_id, pseudo, joined_at)
+         VALUES (?, ?, ?, ?)`,
+        [shareId, user.id, user.pseudo, now]
+      );
+    }
 
     res.json({ shareId });
   } catch (err) {
@@ -199,6 +206,7 @@ app.post("/lists", async (req, res) => {
     res.status(500).json({ error: "CREATE_LIST_FAILED" });
   }
 });
+
 
 
 async function ensureListMember(shareId, user) {
