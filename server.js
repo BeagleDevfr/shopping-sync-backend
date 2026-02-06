@@ -116,14 +116,50 @@ async function initDb() {
   console.log("🟡 Init DB…");
   const conn = await db.getConnection();
 
-await conn.execute(`DROP TABLE IF EXISTS list_members`);
-await conn.execute(`DROP TABLE IF EXISTS items`);
-await conn.execute(`DROP TABLE IF EXISTS lists`);
+//await conn.execute(`DROP TABLE IF EXISTS list_members`);
+//await conn.execute(`DROP TABLE IF EXISTS items`);
+//await conn.execute(`DROP TABLE IF EXISTS lists`);
+
+  await conn.execute(`
+    CREATE TABLE IF NOT EXISTS lists (
+      id VARCHAR(16) PRIMARY KEY,
+      name VARCHAR(255) NOT NULL,
+      created_at BIGINT,
+      updated_at BIGINT
+    )
+  `);
+
+await conn.execute(`
+  CREATE TABLE IF NOT EXISTS items (
+    id VARCHAR(32) PRIMARY KEY,
+    list_id VARCHAR(16) NOT NULL,
+    name VARCHAR(255) NOT NULL,
+    checked TINYINT DEFAULT 0,
+    category VARCHAR(50),
+    added_by JSON NULL,
+    updated_at BIGINT,
+
+    INDEX idx_items_list (list_id),
+
+    CONSTRAINT fk_items_list
+      FOREIGN KEY (list_id) REFERENCES lists(id)
+      ON DELETE CASCADE
+  ) ENGINE=InnoDB;
+`);
 
 
+  await conn.execute(`
+CREATE TABLE IF NOT EXISTS list_members (
+  list_id VARCHAR(16) NOT NULL,
+  user_id VARCHAR(64) NOT NULL,
+  pseudo VARCHAR(64),
+  joined_at BIGINT,
+  PRIMARY KEY (list_id, user_id),
+  FOREIGN KEY (list_id) REFERENCES lists(id)
+    ON DELETE CASCADE
+);
 
-
-  
+  `);
 
   conn.release();
   console.log("✅ MySQL READY");
