@@ -126,8 +126,7 @@ async function initDb() {
   `);
 
 await conn.execute(`
-DROP table items
-  ) ENGINE=InnoDB;
+DROP table items;
 `);
 
 
