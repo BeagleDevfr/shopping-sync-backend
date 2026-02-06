@@ -220,6 +220,33 @@ const [items] = await db.execute(
     })),
   });
 });
+// =========================
+// 👥 MEMBERS LIST
+// =========================
+app.get('/lists/:shareId/members', async (req, res) => {
+  try {
+    const shareId = req.params.shareId.toUpperCase();
+
+    const [rows] = await db.execute(
+      `SELECT user_id, pseudo, joined_at
+       FROM list_members
+       WHERE list_id = ?
+       ORDER BY joined_at ASC`,
+      [shareId]
+    );
+
+    res.json({
+      members: rows.map(r => ({
+        id: r.user_id,
+        pseudo: r.pseudo ?? 'Inconnu',
+        joinedAt: r.joined_at,
+      })),
+    });
+  } catch (err) {
+    console.error('❌ GET MEMBERS FAILED', err);
+    res.status(500).json({ error: 'GET_MEMBERS_FAILED' });
+  }
+});
 
 
 app.get("/lists/:shareId/members-count", (req, res) => {
@@ -235,64 +262,117 @@ app.get("/lists/:shareId/members-count", (req, res) => {
 // SOCKET EVENTS
 // =========================
 io.on("connection", socket => {
+  console.log("🔌 Socket connecté:", socket.id);
 
+  // =========================
+  // JOIN LIST
+  // =========================
   socket.on("JOIN_LIST", async ({ shareId }) => {
-    shareId = shareId.toUpperCase();
-    socket.join(shareId);
+    try {
+      shareId = shareId.toUpperCase();
+      socket.join(shareId);
 
-    const [rows] = await db.execute(
-      `SELECT * FROM items WHERE list_id = ? ORDER BY id ASC`,
-      [shareId]
-    );
+      console.log("📡 JOIN_LIST", shareId);
 
-    // ✅ NORMALISATION DES ITEMS
-    const items = rows.map(row => ({
-      id: row.id,
-      name: row.name,
-      checked: !!row.checked,
-      category: row.category,
-      addedBy: row.addedBy ? JSON.parse(row.addedBy) : null,
-    }));
+      // 📦 récupérer les items depuis la DB
+      const [rows] = await db.execute(
+        `SELECT id, name, checked, category, added_by
+         FROM items
+         WHERE list_id = ?
+         ORDER BY id ASC`,
+        [shareId]
+      );
 
-    // ✅ ENVOI DIRECT DU TABLEAU
-    socket.emit("SNAPSHOT", items);
+      // ✅ normalisation backend → frontend
+      const items = rows.map(row => ({
+        id: row.id,
+        name: row.name,
+        checked: !!row.checked,
+        category: row.category,
+        addedBy: row.added_by ? JSON.parse(row.added_by) : null,
+      }));
+
+      // 📸 SNAPSHOT = TABLEAU DIRECT (important)
+      socket.emit("SNAPSHOT", items);
+
+      // 👥 présence temps réel (optionnel)
+      io.to(shareId).emit("PRESENCE", {
+        count: io.sockets.adapter.rooms.get(shareId)?.size || 1,
+      });
+
+    } catch (err) {
+      console.error("❌ JOIN_LIST ERROR", err);
+    }
   });
 
+  // =========================
+  // ADD ITEM
+  // =========================
   socket.on("ADD_ITEM", async ({ shareId, item }) => {
-    await db.execute(
-      `INSERT INTO items VALUES (?, ?, ?, ?, ?, ?, ?)`,
-      [
-        item.id,
-        shareId,
-        item.name,
-        item.checked ? 1 : 0,
-        item.category,
-        JSON.stringify(item.addedBy ?? null),
-        now(),
-      ]
-    );
+    try {
+      await db.execute(
+        `INSERT INTO items
+         (id, list_id, name, checked, category, added_by, updated_at)
+         VALUES (?, ?, ?, ?, ?, ?, ?)`,
+        [
+          item.id,
+          shareId,
+          item.name,
+          item.checked ? 1 : 0,
+          item.category,
+          JSON.stringify(item.addedBy ?? null),
+          Date.now(),
+        ]
+      );
 
-    io.to(shareId).emit("ITEM_ADDED", item);
+      io.to(shareId).emit("ITEM_ADDED", item);
+    } catch (err) {
+      console.error("❌ ADD_ITEM ERROR", err);
+    }
   });
 
+  // =========================
+  // TOGGLE ITEM
+  // =========================
   socket.on("TOGGLE_ITEM", async ({ shareId, itemId, checked }) => {
-    await db.execute(
-      `UPDATE items SET checked = ? WHERE id = ? AND list_id = ?`,
-      [checked ? 1 : 0, itemId, shareId]
-    );
+    try {
+      await db.execute(
+        `UPDATE items
+         SET checked = ?, updated_at = ?
+         WHERE id = ? AND list_id = ?`,
+        [checked ? 1 : 0, Date.now(), itemId, shareId]
+      );
 
-    io.to(shareId).emit("ITEM_TOGGLED", { itemId, checked });
+      io.to(shareId).emit("ITEM_TOGGLED", { itemId, checked });
+    } catch (err) {
+      console.error("❌ TOGGLE_ITEM ERROR", err);
+    }
   });
 
+  // =========================
+  // REMOVE ITEM
+  // =========================
   socket.on("REMOVE_ITEM", async ({ shareId, itemId }) => {
-    await db.execute(
-      `DELETE FROM items WHERE id = ? AND list_id = ?`,
-      [itemId, shareId]
-    );
+    try {
+      await db.execute(
+        `DELETE FROM items WHERE id = ? AND list_id = ?`,
+        [itemId, shareId]
+      );
 
-    io.to(shareId).emit("ITEM_REMOVED", { itemId });
+      io.to(shareId).emit("ITEM_REMOVED", { itemId });
+    } catch (err) {
+      console.error("❌ REMOVE_ITEM ERROR", err);
+    }
+  });
+
+  // =========================
+  // DISCONNECT
+  // =========================
+  socket.on("disconnect", () => {
+    console.log("❌ Socket déconnecté:", socket.id);
   });
 });
+
 
 
 // =========================
