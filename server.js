@@ -220,20 +220,41 @@ app.get("/lists/:shareId", async (req, res) => {
   });
 });
 
+
+app.get("/lists/:shareId/members-count", (req, res) => {
+  const { shareId } = req.params;
+  const room = io.sockets.adapter.rooms.get(shareId);
+
+  const count = room ? room.size : 1;
+
+  res.json({ count });
+});
+
 // =========================
 // SOCKET EVENTS
 // =========================
 io.on("connection", socket => {
+
   socket.on("JOIN_LIST", async ({ shareId }) => {
     shareId = shareId.toUpperCase();
     socket.join(shareId);
 
-    const [items] = await db.execute(
-      `SELECT * FROM items WHERE list_id = ?`,
+    const [rows] = await db.execute(
+      `SELECT * FROM items WHERE list_id = ? ORDER BY created_at ASC`,
       [shareId]
     );
 
-    socket.emit("SNAPSHOT", { items });
+    // ✅ NORMALISATION DES ITEMS
+    const items = rows.map(row => ({
+      id: row.id,
+      name: row.name,
+      checked: !!row.checked,
+      category: row.category,
+      addedBy: row.addedBy ? JSON.parse(row.addedBy) : null,
+    }));
+
+    // ✅ ENVOI DIRECT DU TABLEAU
+    socket.emit("SNAPSHOT", items);
   });
 
   socket.on("ADD_ITEM", async ({ shareId, item }) => {
@@ -249,6 +270,7 @@ io.on("connection", socket => {
         now(),
       ]
     );
+
     io.to(shareId).emit("ITEM_ADDED", item);
   });
 
@@ -257,6 +279,7 @@ io.on("connection", socket => {
       `UPDATE items SET checked = ? WHERE id = ? AND list_id = ?`,
       [checked ? 1 : 0, itemId, shareId]
     );
+
     io.to(shareId).emit("ITEM_TOGGLED", { itemId, checked });
   });
 
@@ -265,13 +288,16 @@ io.on("connection", socket => {
       `DELETE FROM items WHERE id = ? AND list_id = ?`,
       [itemId, shareId]
     );
+
     io.to(shareId).emit("ITEM_REMOVED", { itemId });
   });
 });
+
 
 // =========================
 // START
 // =========================
 server.listen(PORT, "0.0.0.0", () => {
-  console.log(`🚀 Backend running on ${PORT}`);
+  console.log(`🚀 Backend running on port ${PORT}`);
 });
+
