@@ -122,18 +122,19 @@ async function initDb() {
   console.log("🟡 Init DB…");
   const conn = await db.getConnection();
 
-//await conn.execute(`DROP TABLE IF EXISTS list_members`);
-//await conn.execute(`DROP TABLE IF EXISTS items`);
-//await conn.execute(`DROP TABLE IF EXISTS lists`);
+await conn.execute(`DROP TABLE IF EXISTS list_members`);
+await conn.execute(`DROP TABLE IF EXISTS items`);
+await conn.execute(`DROP TABLE IF EXISTS lists`);
 
-  await conn.execute(`
-    CREATE TABLE IF NOT EXISTS lists (
-      id VARCHAR(16) PRIMARY KEY,
-      name VARCHAR(255) NOT NULL,
-      created_at BIGINT,
-      updated_at BIGINT
-    )
-  `);
+await conn.execute(`
+  CREATE TABLE IF NOT EXISTS lists (
+    id VARCHAR(16) PRIMARY KEY,
+    name VARCHAR(255) NOT NULL,
+    owner_id VARCHAR(64) NOT NULL,
+    created_at BIGINT,
+    updated_at BIGINT
+  )
+`);
 
 await conn.execute(`
   CREATE TABLE IF NOT EXISTS items (
@@ -181,31 +182,37 @@ initDb().catch(err => {
 // =========================
 app.post("/lists", async (req, res) => {
   try {
-    const { name, user } = req.body;
+    const name = safe(req.body?.name, 40) || "Liste partagée";
+    const user = req.body?.user; // { id, pseudo }
 
-    const shareId = generateShareId();
-    const now = Date.now();
+    if (!user?.id) {
+      return res.status(400).json({ error: "USER_REQUIRED" });
+    }
 
+    const shareId = nanoid(7).toUpperCase();
+    const ts = Date.now();
+
+    // ✅ création de la liste avec propriétaire
     await db.execute(
-      `INSERT INTO lists (id, name, created_at, updated_at)
-       VALUES (?, ?, ?, ?)`,
-      [shareId, name, now, now]
+      `INSERT INTO lists (id, name, owner_id, created_at, updated_at)
+       VALUES (?, ?, ?, ?, ?)`,
+      [shareId, name, user.id, ts, ts]
     );
 
-    if (user?.id) {
-      await db.execute(
-        `INSERT INTO list_members (list_id, user_id, pseudo, joined_at)
-         VALUES (?, ?, ?, ?)`,
-        [shareId, user.id, user.pseudo, now]
-      );
-    }
+    // ✅ le créateur est aussi membre
+    await db.execute(
+      `INSERT INTO list_members (list_id, user_id, pseudo, joined_at)
+       VALUES (?, ?, ?, ?)`,
+      [shareId, user.id, user.pseudo ?? null, ts]
+    );
 
     res.json({ shareId });
   } catch (err) {
-    console.error("❌ CREATE LIST ERROR", err);
+    console.error("❌ CREATE LIST FAILED", err);
     res.status(500).json({ error: "CREATE_LIST_FAILED" });
   }
 });
+
 
 
 app.post("/lists/:shareId/join", async (req, res) => {
