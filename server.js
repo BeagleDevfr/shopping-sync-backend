@@ -39,7 +39,7 @@ const { nanoid } = require("nanoid");
 const mysql = require("mysql2/promise");
 
 // =========================
-// CONFIG
+// CONFIGsdfsdf-s
 // =========================
 const PORT = Number(process.env.PORT || 8080);
 
