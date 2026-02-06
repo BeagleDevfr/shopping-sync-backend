@@ -117,45 +117,14 @@ async function initDb() {
   const conn = await db.getConnection();
 
   await conn.execute(`
-    CREATE TABLE IF NOT EXISTS lists (
-      id VARCHAR(16) PRIMARY KEY,
-      name VARCHAR(255) NOT NULL,
-      created_at BIGINT,
-      updated_at BIGINT
-    )
+DROP TABLE lists;
+DROP TABLE items;
+DROP TABLE list_members;
   `);
 
-await conn.execute(`
-  CREATE TABLE IF NOT EXISTS items (
-    id VARCHAR(32) PRIMARY KEY,
-    list_id VARCHAR(16) NOT NULL,
-    name VARCHAR(255) NOT NULL,
-    checked TINYINT DEFAULT 0,
-    category VARCHAR(50),
-    added_by JSON NULL,
-    updated_at BIGINT,
-
-    INDEX idx_items_list (list_id),
-
-    CONSTRAINT fk_items_list
-      FOREIGN KEY (list_id) REFERENCES lists(id)
-      ON DELETE CASCADE
-  ) ENGINE=InnoDB;
-`);
 
 
-  await conn.execute(`
-CREATE TABLE IF NOT EXISTS list_members (
-  list_id VARCHAR(16) NOT NULL,
-  user_id VARCHAR(64) NOT NULL,
-  pseudo VARCHAR(64),
-  joined_at BIGINT,
-  PRIMARY KEY (list_id, user_id),
-  FOREIGN KEY (list_id) REFERENCES lists(id)
-    ON DELETE CASCADE
-);
-
-  `);
+  
 
   conn.release();
   console.log("✅ MySQL READY");
@@ -171,32 +140,31 @@ initDb().catch(err => {
 // =========================
 app.post("/lists", async (req, res) => {
   try {
-    const name = safe(req.body?.name, 40) || "Liste partagée";
-    const shareId = nanoid(7).toUpperCase();
-    const ts = now();
+    const { name, owner } = req.body;
+
+    const shareId = generateShareId();
+    const now = Date.now();
 
     await db.execute(
       `INSERT INTO lists (id, name, created_at, updated_at)
        VALUES (?, ?, ?, ?)`,
-      [shareId, name, ts, ts]
+      [shareId, name, now, now]
     );
 
-    const user = req.body?.user;
-    if (user?.id) {
-      await db.execute(
-        `INSERT IGNORE INTO list_members
-         (id, list_id, user_id, pseudo, joined_at)
-         VALUES (?, ?, ?, ?, ?)`,
-        [nanoid(), shareId, user.id, user.pseudo ?? null, ts]
-      );
-    }
+    // créateur = membre
+    await db.execute(
+      `INSERT INTO list_members (list_id, user_id, pseudo, joined_at)
+       VALUES (?, ?, ?, ?)`,
+      [shareId, owner.id, owner.pseudo, now]
+    );
 
     res.json({ shareId });
   } catch (err) {
-    console.error(err);
+    console.error("❌ CREATE LIST ERROR", err);
     res.status(500).json({ error: "CREATE_LIST_FAILED" });
   }
 });
+
 
 async function ensureListMember(shareId, user) {
   // ✅ sécurité absolue
