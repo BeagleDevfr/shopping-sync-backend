@@ -116,11 +116,10 @@ async function initDb() {
   console.log("🟡 Init DB…");
   const conn = await db.getConnection();
 
-  await conn.execute(`
-DROP TABLE lists;
-DROP TABLE items;
-DROP TABLE list_members;
-  `);
+await conn.execute(`DROP TABLE IF EXISTS list_members`);
+await conn.execute(`DROP TABLE IF EXISTS items`);
+await conn.execute(`DROP TABLE IF EXISTS lists`);
+
 
 
 
