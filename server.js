@@ -125,19 +125,11 @@ async function initDb() {
     )
   `);
 
-  await conn.execute(`
-    CREATE TABLE IF NOT EXISTS items (
-      id VARCHAR(32) PRIMARY KEY,
-      list_id VARCHAR(16) NOT NULL,
-      name VARCHAR(255) NOT NULL,
-      checked TINYINT DEFAULT 0,
-      category VARCHAR(50),
-      added_by JSON,
-      updated_at BIGINT,
-      FOREIGN KEY (list_id) REFERENCES lists(id)
-        ON DELETE CASCADE
-    )
-  `);
+await conn.execute(`
+DROP table items
+  ) ENGINE=InnoDB;
+`);
+
 
   await conn.execute(`
     CREATE TABLE IF NOT EXISTS list_members (
@@ -267,69 +259,72 @@ io.on("connection", socket => {
   // =========================
   // JOIN LIST
   // =========================
-  socket.on("JOIN_LIST", async ({ shareId }) => {
-    try {
-      shareId = shareId.toUpperCase();
-      socket.join(shareId);
+socket.on("JOIN_LIST", async ({ shareId }) => {
+  try {
+    shareId = shareId.toUpperCase();
+    socket.join(shareId);
 
-      console.log("📡 JOIN_LIST", shareId);
+    const [rows] = await db.execute(
+      `SELECT * FROM items WHERE list_id = ? ORDER BY updated_at ASC`,
+      [shareId]
+    );
 
-      // 📦 récupérer les items depuis la DB
-      const [rows] = await db.execute(
-        `SELECT id, name, checked, category, added_by
-         FROM items
-         WHERE list_id = ?
-         ORDER BY id ASC`,
-        [shareId]
-      );
+    const items = rows.map(row => ({
+      id: row.id,
+      name: row.name,
+      checked: !!row.checked,
+      category: row.category,
 
-      // ✅ normalisation backend → frontend
-      const items = rows.map(row => ({
-        id: row.id,
-        name: row.name,
-        checked: !!row.checked,
-        category: row.category,
-        addedBy: row.added_by ? JSON.parse(row.added_by) : null,
-      }));
+      // 🔒 PARSE SAFE (FIX CLÉ)
+      addedBy:
+        typeof row.added_by === "string"
+          ? (() => {
+              try {
+                return JSON.parse(row.added_by);
+              } catch {
+                return null;
+              }
+            })()
+          : row.added_by ?? null,
+    }));
 
-      // 📸 SNAPSHOT = TABLEAU DIRECT (important)
-      socket.emit("SNAPSHOT", items);
+    console.log("📸 SNAPSHOT SEND", items.length);
 
-      // 👥 présence temps réel (optionnel)
-      io.to(shareId).emit("PRESENCE", {
-        count: io.sockets.adapter.rooms.get(shareId)?.size || 1,
-      });
+    socket.emit("SNAPSHOT", items);
+  } catch (err) {
+    console.error("❌ JOIN_LIST ERROR", err);
+    socket.emit("SNAPSHOT", []);
+  }
+});
 
-    } catch (err) {
-      console.error("❌ JOIN_LIST ERROR", err);
-    }
-  });
+
 
   // =========================
   // ADD ITEM
   // =========================
-  socket.on("ADD_ITEM", async ({ shareId, item }) => {
-    try {
-      await db.execute(
-        `INSERT INTO items
-         (id, list_id, name, checked, category, added_by, updated_at)
-         VALUES (?, ?, ?, ?, ?, ?, ?)`,
-        [
-          item.id,
-          shareId,
-          item.name,
-          item.checked ? 1 : 0,
-          item.category,
-          JSON.stringify(item.addedBy ?? null),
-          Date.now(),
-        ]
-      );
+socket.on("ADD_ITEM", async ({ shareId, item }) => {
+  try {
+    await db.execute(
+      `INSERT INTO items
+       (id, list_id, name, checked, category, added_by, updated_at)
+       VALUES (?, ?, ?, ?, ?, ?, ?)`,
+      [
+        item.id,
+        shareId,
+        item.name,
+        item.checked ? 1 : 0,
+        item.category,
+        JSON.stringify(item.addedBy ?? null), // ✅ OK
+        Date.now(),
+      ]
+    );
 
-      io.to(shareId).emit("ITEM_ADDED", item);
-    } catch (err) {
-      console.error("❌ ADD_ITEM ERROR", err);
-    }
-  });
+    io.to(shareId).emit("ITEM_ADDED", item);
+  } catch (err) {
+    console.error("❌ ADD_ITEM ERROR", err);
+  }
+});
+
 
   // =========================
   // TOGGLE ITEM
