@@ -145,7 +145,16 @@ await conn.execute(`
 
 
   await conn.execute(`
-DROP table list_members
+CREATE TABLE IF NOT EXISTS list_members (
+  list_id VARCHAR(16) NOT NULL,
+  user_id VARCHAR(64) NOT NULL,
+  pseudo VARCHAR(64),
+  joined_at BIGINT,
+  PRIMARY KEY (list_id, user_id),
+  FOREIGN KEY (list_id) REFERENCES lists(id)
+    ON DELETE CASCADE
+);
+
   `);
 
   conn.release();
@@ -190,32 +199,43 @@ app.post("/lists", async (req, res) => {
 });
 
 app.get("/lists/:shareId", async (req, res) => {
-  const shareId = req.params.shareId.toUpperCase();
+  try {
+    const shareId = req.params.shareId.toUpperCase();
 
-  const [[list]] = await db.execute(
-    `SELECT * FROM lists WHERE id = ?`,
-    [shareId]
-  );
-  if (!list) return res.status(404).json({ error: "NOT_FOUND" });
+    const [[list]] = await db.execute(
+      `SELECT * FROM lists WHERE id = ?`,
+      [shareId]
+    );
+    if (!list) {
+      return res.status(404).json({ error: "NOT_FOUND" });
+    }
 
-const [items] = await db.execute(
-  `SELECT * FROM items WHERE list_id = ? ORDER BY id ASC`,
-  [shareId]
-);
+    // ✅ AJOUT ICI : enregistrer l'utilisateur comme membre
+    // ⚠️ req.user DOIT contenir { id, pseudo }
+    await ensureListMember(shareId, req.user);
 
+    const [items] = await db.execute(
+      `SELECT * FROM items WHERE list_id = ? ORDER BY id ASC`,
+      [shareId]
+    );
 
-  res.json({
-    list,
-    items: items.map(i => ({
-      id: i.id,
-      name: i.name,
-      checked: !!i.checked,
-      category: i.category,
-      addedBy: parseAddedBy(i.added_by),
-      updatedAt: i.updated_at,
-    })),
-  });
+    res.json({
+      list,
+      items: items.map(i => ({
+        id: i.id,
+        name: i.name,
+        checked: !!i.checked,
+        category: i.category,
+        addedBy: parseAddedBy(i.added_by),
+        updatedAt: i.updated_at,
+      })),
+    });
+  } catch (err) {
+    console.error("❌ GET LIST ERROR", err);
+    res.status(500).json({ error: "SERVER_ERROR" });
+  }
 });
+
 // =========================
 // 👥 MEMBERS LIST
 // =========================
@@ -301,6 +321,20 @@ socket.on("JOIN_LIST", async ({ shareId }) => {
   }
 });
 
+async function ensureMember(shareId, user) {
+  await db.execute(
+    `
+    INSERT IGNORE INTO list_members (list_id, user_id, pseudo, joined_at)
+    VALUES (?, ?, ?, ?)
+    `,
+    [
+      shareId,
+      user.id,
+      user.pseudo,
+      Date.now()
+    ]
+  );
+}
 
 
   // =========================
