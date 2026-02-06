@@ -202,10 +202,11 @@ app.get("/lists/:shareId", async (req, res) => {
   );
   if (!list) return res.status(404).json({ error: "NOT_FOUND" });
 
-  const [items] = await db.execute(
-    `SELECT * FROM items WHERE list_id = ? ORDER BY updated_at DESC`,
-    [shareId]
-  );
+const [items] = await db.execute(
+  `SELECT * FROM items WHERE list_id = ? ORDER BY id ASC`,
+  [shareId]
+);
+
 
   res.json({
     list,
