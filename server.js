@@ -198,6 +198,24 @@ app.post("/lists", async (req, res) => {
   }
 });
 
+async function ensureListMember(shareId, user) {
+  // ✅ sécurité absolue
+  if (!user || !user.id) return;
+
+  await db.execute(
+    `
+    INSERT IGNORE INTO list_members (list_id, user_id, pseudo, joined_at)
+    VALUES (?, ?, ?, ?)
+    `,
+    [
+      shareId,
+      user.id,
+      user.pseudo ?? null,
+      Date.now(),
+    ]
+  );
+}
+
 app.get("/lists/:shareId", async (req, res) => {
   try {
     const shareId = req.params.shareId.toUpperCase();
@@ -210,8 +228,7 @@ app.get("/lists/:shareId", async (req, res) => {
       return res.status(404).json({ error: "NOT_FOUND" });
     }
 
-    // ✅ AJOUT ICI : enregistrer l'utilisateur comme membre
-    // ⚠️ req.user DOIT contenir { id, pseudo }
+    // ✅ SAFE : même si req.user n'existe pas
     await ensureListMember(shareId, req.user);
 
     const [items] = await db.execute(
@@ -231,10 +248,13 @@ app.get("/lists/:shareId", async (req, res) => {
       })),
     });
   } catch (err) {
-    console.error("❌ GET LIST ERROR", err);
+    console.error("❌ GET /lists ERROR", err);
     res.status(500).json({ error: "SERVER_ERROR" });
   }
 });
+
+
+
 
 // =========================
 // 👥 MEMBERS LIST
