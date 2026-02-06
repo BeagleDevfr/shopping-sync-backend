@@ -208,6 +208,29 @@ app.post("/lists", async (req, res) => {
 });
 
 
+app.post("/lists/:shareId/join", async (req, res) => {
+  try {
+    const shareId = req.params.shareId.toUpperCase();
+    const { user } = req.body;
+
+    if (!user?.id) {
+      return res.status(400).json({ error: "NO_USER" });
+    }
+
+    const now = Date.now();
+
+    await db.execute(
+      `INSERT IGNORE INTO list_members (list_id, user_id, pseudo, joined_at)
+       VALUES (?, ?, ?, ?)`,
+      [shareId, user.id, user.pseudo, now]
+    );
+
+    res.json({ success: true });
+  } catch (err) {
+    console.error("❌ JOIN LIST ERROR", err);
+    res.status(500).json({ error: "JOIN_FAILED" });
+  }
+});
 
 async function ensureListMember(shareId, user) {
   // ✅ sécurité absolue
