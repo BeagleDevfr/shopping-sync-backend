@@ -12,6 +12,7 @@ if (!DATABASE_URL) {
 }
 
 console.log("DB URL OK");
+console.log("MYSQL HOST USED =", process.env.MYSQLHOST);
 
 const db = mysql.createPool(DATABASE_URL);
 
