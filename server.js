@@ -241,7 +241,7 @@ io.on("connection", socket => {
     socket.join(shareId);
 
     const [rows] = await db.execute(
-      `SELECT * FROM items WHERE list_id = ? ORDER BY created_at ASC`,
+      `SELECT * FROM items WHERE list_id = ? ORDER BY id ASC`,
       [shareId]
     );
 
