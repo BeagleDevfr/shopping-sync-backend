@@ -126,21 +126,26 @@ async function initDb() {
   `);
 
 await conn.execute(`
-DROP table items
+  CREATE TABLE IF NOT EXISTS items (
+    id VARCHAR(32) PRIMARY KEY,
+    list_id VARCHAR(16) NOT NULL,
+    name VARCHAR(255) NOT NULL,
+    checked TINYINT DEFAULT 0,
+    category VARCHAR(50),
+    added_by JSON NULL,
+    updated_at BIGINT,
+
+    INDEX idx_items_list (list_id),
+
+    CONSTRAINT fk_items_list
+      FOREIGN KEY (list_id) REFERENCES lists(id)
+      ON DELETE CASCADE
+  ) ENGINE=InnoDB;
 `);
 
 
   await conn.execute(`
-    CREATE TABLE IF NOT EXISTS list_members (
-      id VARCHAR(32) PRIMARY KEY,
-      list_id VARCHAR(16) NOT NULL,
-      user_id VARCHAR(32) NOT NULL,
-      pseudo VARCHAR(50),
-      joined_at BIGINT,
-      UNIQUE KEY unique_member (list_id, user_id),
-      FOREIGN KEY (list_id) REFERENCES lists(id)
-        ON DELETE CASCADE
-    )
+DROP table list_members
   `);
 
   conn.release();
