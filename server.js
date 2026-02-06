@@ -51,6 +51,7 @@ const ALLOWED_ORIGINS = [
   "https://localhost",
 ];
 
+
 // =========================
 // APP
 // =========================
@@ -65,13 +66,21 @@ app.use((req, _res, next) => {
 app.use(
   cors({
     origin(origin, callback) {
-      if (!origin) return callback(null, true);
-      if (ALLOWED_ORIGINS.includes(origin)) return callback(null, true);
-      callback(new Error("Not allowed by CORS"));
+      if (!origin) return callback(null, true); // mobile / capacitor
+      if (ALLOWED_ORIGINS.includes(origin)) {
+        return callback(null, true);
+      }
+      return callback(new Error("Not allowed by CORS"));
     },
+    methods: ["GET", "POST", "PUT", "DELETE", "OPTIONS"],
+    allowedHeaders: ["Content-Type", "Authorization"],
     credentials: true,
   })
 );
+
+// 🔥 OBLIGATOIRE POUR LE PREFLIGHT
+app.options("*", cors());
+
 
 app.get("/", (_req, res) => res.send("OK"));
 
