@@ -319,14 +319,24 @@ app.get('/lists/:shareId/members', async (req, res) => {
 });
 
 
-app.get("/lists/:shareId/members-count", (req, res) => {
-  const { shareId } = req.params;
-  const room = io.sockets.adapter.rooms.get(shareId);
+app.get("/lists/:shareId/members-count", async (req, res) => {
+  try {
+    const shareId = req.params.shareId.toUpperCase();
 
-  const count = room ? room.size : 1;
+    const [[row]] = await db.execute(
+      `SELECT COUNT(*) AS count
+       FROM list_members
+       WHERE list_id = ?`,
+      [shareId]
+    );
 
-  res.json({ count });
+    res.json({ count: row.count });
+  } catch (err) {
+    console.error("❌ MEMBERS COUNT ERROR", err);
+    res.status(500).json({ error: "INTERNAL_ERROR" });
+  }
 });
+
 
 // =========================
 // SOCKET EVENTS
