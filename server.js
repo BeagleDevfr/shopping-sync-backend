@@ -475,6 +475,26 @@ socket.on("ADD_ITEM", async ({ shareId, item }) => {
     }
   });
 
+
+  app.delete('/lists/:shareId/members/:userId', async (req, res) => {
+  const { shareId, userId } = req.params;
+
+  try {
+    await db.execute(
+      `DELETE FROM list_members WHERE list_id = ? AND user_id = ?`,
+      [shareId.toUpperCase(), userId]
+    );
+
+    console.log('🗑 MEMBER REMOVED', shareId, userId);
+
+    res.json({ success: true });
+  } catch (err) {
+    console.error('❌ REMOVE MEMBER ERROR', err);
+    res.status(500).json({ error: 'REMOVE_MEMBER_FAILED' });
+  }
+});
+
+
   // =========================
   // DISCONNECT
   // =========================
