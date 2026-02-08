@@ -390,11 +390,25 @@ io.on("connection", socket => {
   // =========================
   // JOIN LIST
   // =========================
-socket.on("JOIN_LIST", async ({ shareId }) => {
-  try {
-    shareId = shareId.toUpperCase();
+io.on("connection", socket => {
+  console.log("🔌 Socket connecté:", socket.id);
 
-     /* =========================
+  // =========================
+  // JOIN LIST
+  // =========================
+  socket.on("JOIN_LIST", async ({ shareId, userId }) => {
+    try {
+      if (!shareId || !userId) {
+        console.warn("⚠️ JOIN_LIST invalide", { shareId, userId });
+        socket.emit("SNAPSHOT", []);
+        return;
+      }
+
+      shareId = shareId.toUpperCase();
+
+      console.log("📡 JOIN_LIST", { shareId, userId });
+
+      /* =========================
          🚫 VÉRIF BANNI (AVANT TOUT)
       ========================= */
       const [[ban]] = await db.execute(
@@ -403,7 +417,7 @@ socket.on("JOIN_LIST", async ({ shareId }) => {
       );
 
       if (ban) {
-        console.warn('⛔ USER BANNED', userId);
+        console.warn("⛔ USER BANNED", userId);
 
         socket.emit("JOIN_DENIED", {
           reason: "BANNED",
@@ -412,41 +426,56 @@ socket.on("JOIN_LIST", async ({ shareId }) => {
         return; // ⛔ STOP ICI
       }
 
-      
-    socket.join(shareId);
+      /* =========================
+         ✅ JOIN ROOM
+      ========================= */
+      socket.join(shareId);
 
-    const [rows] = await db.execute(
-      `SELECT * FROM items WHERE list_id = ? ORDER BY updated_at ASC`,
-      [shareId]
-    );
+      /* =========================
+         📦 LOAD ITEMS
+      ========================= */
+      const [rows] = await db.execute(
+        `SELECT * FROM items WHERE list_id = ? ORDER BY updated_at ASC`,
+        [shareId]
+      );
 
-    const items = rows.map(row => ({
-      id: row.id,
-      name: row.name,
-      checked: !!row.checked,
-      category: row.category,
+      const items = rows.map(row => ({
+        id: row.id,
+        name: row.name,
+        checked: !!row.checked,
+        category: row.category,
 
-      // 🔒 PARSE SAFE (FIX CLÉ)
-      addedBy:
-        typeof row.added_by === "string"
-          ? (() => {
-              try {
-                return JSON.parse(row.added_by);
-              } catch {
-                return null;
-              }
-            })()
-          : row.added_by ?? null,
-    }));
+        // 🔒 PARSE SAFE
+        addedBy:
+          typeof row.added_by === "string"
+            ? (() => {
+                try {
+                  return JSON.parse(row.added_by);
+                } catch {
+                  return null;
+                }
+              })()
+            : row.added_by ?? null,
+      }));
 
-    console.log("📸 SNAPSHOT SEND", items.length);
+      console.log("📸 SNAPSHOT SEND", items.length);
 
-    socket.emit("SNAPSHOT", items);
-  } catch (err) {
-    console.error("❌ JOIN_LIST ERROR", err);
-    socket.emit("SNAPSHOT", []);
-  }
+      socket.emit("SNAPSHOT", items);
+
+      /* =========================
+         👥 PRESENCE
+      ========================= */
+      io.to(shareId).emit("PRESENCE", {
+        count: io.sockets.adapter.rooms.get(shareId)?.size ?? 1,
+      });
+
+    } catch (err) {
+      console.error("❌ JOIN_LIST ERROR", err);
+      socket.emit("SNAPSHOT", []);
+    }
+  });
 });
+
 
 async function ensureMember(shareId, user) {
   await db.execute(
