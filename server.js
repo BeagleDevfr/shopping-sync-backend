@@ -274,32 +274,7 @@ app.get("/lists/:shareId", async (req, res) => {
     }
 
     /* =========================
-       2️⃣ UTILISATEUR REQUIS
-    ========================= */
-    const user = req.user;
-    if (!user?.id) {
-      return res.status(401).json({ error: "USER_REQUIRED" });
-    }
-
-    /* =========================
-       3️⃣ VÉRIFIER L’ACCÈS (PAS D’AUTO-JOIN)
-    ========================= */
-    const [[member]] = await db.execute(
-      `
-      SELECT 1
-      FROM list_members
-      WHERE list_id = ?
-        AND user_id = ?
-      `,
-      [shareId, user.id]
-    );
-
-    if (!member) {
-      return res.status(403).json({ error: "ACCESS_DENIED" });
-    }
-
-    /* =========================
-       4️⃣ CHARGER LES ITEMS
+       2️⃣ CHARGER LES ITEMS
     ========================= */
     const [items] = await db.execute(
       `SELECT * FROM items WHERE list_id = ? ORDER BY id ASC`,
@@ -307,10 +282,16 @@ app.get("/lists/:shareId", async (req, res) => {
     );
 
     /* =========================
-       5️⃣ RÉPONSE
+       3️⃣ RÉPONSE
     ========================= */
     res.json({
-      list,
+      list: {
+        id: list.id,
+        name: list.name,
+        owner_id: list.owner_id,
+        created_at: list.created_at,
+        updated_at: list.updated_at,
+      },
       items: items.map(i => ({
         id: i.id,
         name: i.name,
@@ -326,6 +307,7 @@ app.get("/lists/:shareId", async (req, res) => {
     res.status(500).json({ error: "SERVER_ERROR" });
   }
 });
+
 
 
 
