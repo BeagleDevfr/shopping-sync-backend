@@ -384,7 +384,11 @@ app.put('/lists/:shareId/rename', async (req, res) => {
   try {
     const shareId = req.params.shareId.toUpperCase();
     const { name } = req.body;
-    const user = req.user;
+    const user = req.body?.user;
+if (!user?.id) {
+  return res.status(401).json({ error: "USER_REQUIRED" });
+}
+
 
     if (!user?.id) {
       return res.status(401).json({ error: 'USER_REQUIRED' });
