@@ -380,6 +380,46 @@ app.get("/lists/:shareId/members-count", async (req, res) => {
   }
 });
 
+app.put('/lists/:shareId/rename', async (req, res) => {
+  try {
+    const shareId = req.params.shareId.toUpperCase();
+    const { name } = req.body;
+    const user = req.user;
+
+    if (!user?.id) {
+      return res.status(401).json({ error: 'USER_REQUIRED' });
+    }
+
+    if (!name?.trim()) {
+      return res.status(400).json({ error: 'NAME_REQUIRED' });
+    }
+
+    // 🔐 vérifier propriétaire
+    const [[list]] = await db.execute(
+      `SELECT owner_id FROM lists WHERE id = ?`,
+      [shareId]
+    );
+
+    if (!list) {
+      return res.status(404).json({ error: 'NOT_FOUND' });
+    }
+
+    if (list.owner_id !== user.id) {
+      return res.status(403).json({ error: 'NOT_OWNER' });
+    }
+
+    await db.execute(
+      `UPDATE lists SET name = ?, updated_at = ? WHERE id = ?`,
+      [name.trim(), Date.now(), shareId]
+    );
+
+    res.json({ success: true });
+
+  } catch (err) {
+    console.error('❌ RENAME LIST ERROR', err);
+    res.status(500).json({ error: 'SERVER_ERROR' });
+  }
+});
 
 // =========================
 // SOCKET EVENTS
