@@ -261,17 +261,33 @@ app.get("/lists/:shareId", async (req, res) => {
   try {
     const shareId = req.params.shareId.toUpperCase();
 
+    // 1️⃣ vérifier la liste
     const [[list]] = await db.execute(
       `SELECT * FROM lists WHERE id = ?`,
       [shareId]
     );
+
     if (!list) {
       return res.status(404).json({ error: "NOT_FOUND" });
     }
 
-    // ✅ SAFE : même si req.user n'existe pas
-    await ensureListMember(shareId, req.user);
+    // 2️⃣ utilisateur requis
+    const user = req.user;
+    if (!user?.id) {
+      return res.status(401).json({ error: "USER_REQUIRED" });
+    }
 
+    // 3️⃣ vérifier qu’il est membre (⚠️ PAS d’auto-ajout ici)
+    const [[member]] = await db.execute(
+      `SELECT 1 FROM list_members WHERE list_id = ? AND user_id = ?`,
+      [shareId, user.id]
+    );
+
+    if (!member) {
+      return res.status(403).json({ error: "ACCESS_DENIED" });
+    }
+
+    // 4️⃣ charger les items
     const [items] = await db.execute(
       `SELECT * FROM items WHERE list_id = ? ORDER BY id ASC`,
       [shareId]
@@ -288,11 +304,13 @@ app.get("/lists/:shareId", async (req, res) => {
         updatedAt: i.updated_at,
       })),
     });
+
   } catch (err) {
     console.error("❌ GET /lists ERROR", err);
     res.status(500).json({ error: "SERVER_ERROR" });
   }
 });
+
 
 
 
@@ -476,23 +494,30 @@ socket.on("ADD_ITEM", async ({ shareId, item }) => {
   });
 
 
-  app.delete('/lists/:shareId/members/:userId', async (req, res) => {
-  const { shareId, userId } = req.params;
-
+app.delete('/lists/:shareId/members/:userId', async (req, res) => {
   try {
+    const shareId = req.params.shareId.toUpperCase();
+    const removedUserId = req.params.userId;
+
+    // 🔥 suppression en base
     await db.execute(
       `DELETE FROM list_members WHERE list_id = ? AND user_id = ?`,
-      [shareId.toUpperCase(), userId]
+      [shareId, removedUserId]
     );
 
-    console.log('🗑 MEMBER REMOVED', shareId, userId);
+    // 🔥 NOTIFICATION TEMPS RÉEL
+    io.to(shareId).emit('MEMBER_REMOVED', {
+      shareId,
+      userId: removedUserId,
+    });
 
     res.json({ success: true });
   } catch (err) {
     console.error('❌ REMOVE MEMBER ERROR', err);
-    res.status(500).json({ error: 'REMOVE_MEMBER_FAILED' });
+    res.status(500).json({ error: 'SERVER_ERROR' });
   }
 });
+
 
 
   // =========================
