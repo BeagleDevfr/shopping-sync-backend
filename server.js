@@ -261,7 +261,9 @@ app.get("/lists/:shareId", async (req, res) => {
   try {
     const shareId = req.params.shareId.toUpperCase();
 
-    // 1️⃣ vérifier la liste
+    /* =========================
+       1️⃣ VÉRIFIER LA LISTE
+    ========================= */
     const [[list]] = await db.execute(
       `SELECT * FROM lists WHERE id = ?`,
       [shareId]
@@ -271,15 +273,24 @@ app.get("/lists/:shareId", async (req, res) => {
       return res.status(404).json({ error: "NOT_FOUND" });
     }
 
-    // 2️⃣ utilisateur requis
+    /* =========================
+       2️⃣ UTILISATEUR REQUIS
+    ========================= */
     const user = req.user;
     if (!user?.id) {
       return res.status(401).json({ error: "USER_REQUIRED" });
     }
 
-    // 3️⃣ vérifier qu’il est membre (⚠️ PAS d’auto-ajout ici)
+    /* =========================
+       3️⃣ VÉRIFIER L’ACCÈS (PAS D’AUTO-JOIN)
+    ========================= */
     const [[member]] = await db.execute(
-      `SELECT 1 FROM list_members WHERE list_id = ? AND user_id = ?`,
+      `
+      SELECT 1
+      FROM list_members
+      WHERE list_id = ?
+        AND user_id = ?
+      `,
       [shareId, user.id]
     );
 
@@ -287,12 +298,17 @@ app.get("/lists/:shareId", async (req, res) => {
       return res.status(403).json({ error: "ACCESS_DENIED" });
     }
 
-    // 4️⃣ charger les items
+    /* =========================
+       4️⃣ CHARGER LES ITEMS
+    ========================= */
     const [items] = await db.execute(
       `SELECT * FROM items WHERE list_id = ? ORDER BY id ASC`,
       [shareId]
     );
 
+    /* =========================
+       5️⃣ RÉPONSE
+    ========================= */
     res.json({
       list,
       items: items.map(i => ({
