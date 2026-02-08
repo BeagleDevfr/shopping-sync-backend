@@ -505,6 +505,7 @@ app.delete('/lists/:shareId/members/:userId', async (req, res) => {
 
     // 🔥 NOTIFICATION TEMPS RÉEL
     io.to(shareId).emit('MEMBER_REMOVED', {
+      
       shareId,
       userId: removedUserId,
     });
