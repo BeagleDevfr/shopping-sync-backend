@@ -168,6 +168,20 @@ CREATE TABLE IF NOT EXISTS list_members (
 
   `);
 
+  await conn.execute(`
+  CREATE TABLE IF NOT EXISTS list_bans (
+  list_id VARCHAR(16) NOT NULL,
+  user_id VARCHAR(64) NOT NULL,
+  banned_at BIGINT,
+  PRIMARY KEY (list_id, user_id),
+  FOREIGN KEY (list_id) REFERENCES lists(id) ON DELETE CASCADE
+);
+
+  `);
+
+
+
+
   conn.release();
   console.log("✅ MySQL READY");
 }
@@ -379,6 +393,26 @@ io.on("connection", socket => {
 socket.on("JOIN_LIST", async ({ shareId }) => {
   try {
     shareId = shareId.toUpperCase();
+
+     /* =========================
+         🚫 VÉRIF BANNI (AVANT TOUT)
+      ========================= */
+      const [[ban]] = await db.execute(
+        `SELECT 1 FROM list_bans WHERE list_id = ? AND user_id = ?`,
+        [shareId, userId]
+      );
+
+      if (ban) {
+        console.warn('⛔ USER BANNED', userId);
+
+        socket.emit("JOIN_DENIED", {
+          reason: "BANNED",
+        });
+
+        return; // ⛔ STOP ICI
+      }
+
+      
     socket.join(shareId);
 
     const [rows] = await db.execute(
@@ -502,6 +536,13 @@ app.delete('/lists/:shareId/members/:userId', async (req, res) => {
       `DELETE FROM list_members WHERE list_id = ? AND user_id = ?`,
       [shareId, removedUserId]
     );
+
+// 2️⃣ ajouter dans list_bans
+await db.execute(
+  `INSERT IGNORE INTO list_bans (list_id, user_id, banned_at)
+   VALUES (?, ?, ?)`,
+  [shareId, removedUserId, Date.now()]
+);
 
     // 🔥 NOTIFICATION TEMPS RÉEL
     io.to(shareId).emit('MEMBER_REMOVED', {
