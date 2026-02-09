@@ -456,7 +456,66 @@ io.to(shareId).emit("LIST_RENAMED", {
   // =========================
 io.on("connection", socket => {
   console.log("🔌 Socket connecté:", socket.id);
+// =========================
+  // ADD ITEM
+  // =========================
+socket.on("ADD_ITEM", async ({ shareId, item }) => {
+  try {
+    await db.execute(
+      `INSERT INTO items
+       (id, list_id, name, checked, category, added_by, updated_at)
+       VALUES (?, ?, ?, ?, ?, ?, ?)`,
+      [
+        item.id,
+        shareId,
+        item.name,
+        item.checked ? 1 : 0,
+        item.category,
+        JSON.stringify(item.addedBy ?? null), // ✅ OK
+        Date.now(),
+      ]
+    );
 
+    io.to(shareId).emit("ITEM_ADDED", item);
+  } catch (err) {
+    console.error("❌ ADD_ITEM ERROR", err);
+  }
+});
+
+
+  // =========================
+  // TOGGLE ITEM
+  // =========================
+  socket.on("TOGGLE_ITEM", async ({ shareId, itemId, checked }) => {
+    try {
+      await db.execute(
+        `UPDATE items
+         SET checked = ?, updated_at = ?
+         WHERE id = ? AND list_id = ?`,
+        [checked ? 1 : 0, Date.now(), itemId, shareId]
+      );
+
+      io.to(shareId).emit("ITEM_TOGGLED", { itemId, checked });
+    } catch (err) {
+      console.error("❌ TOGGLE_ITEM ERROR", err);
+    }
+  });
+
+  // =========================
+  // REMOVE ITEM
+  // =========================
+  socket.on("REMOVE_ITEM", async ({ shareId, itemId }) => {
+    try {
+      await db.execute(
+        `DELETE FROM items WHERE id = ? AND list_id = ?`,
+        [itemId, shareId]
+      );
+
+      io.to(shareId).emit("ITEM_REMOVED", { itemId });
+    } catch (err) {
+      console.error("❌ REMOVE_ITEM ERROR", err);
+    }
+  });
   // =========================
   // JOIN LIST
   // =========================
@@ -557,66 +616,7 @@ async function ensureMember(shareId, user) {
 }
 
 
-  // =========================
-  // ADD ITEM
-  // =========================
-socket.on("ADD_ITEM", async ({ shareId, item }) => {
-  try {
-    await db.execute(
-      `INSERT INTO items
-       (id, list_id, name, checked, category, added_by, updated_at)
-       VALUES (?, ?, ?, ?, ?, ?, ?)`,
-      [
-        item.id,
-        shareId,
-        item.name,
-        item.checked ? 1 : 0,
-        item.category,
-        JSON.stringify(item.addedBy ?? null), // ✅ OK
-        Date.now(),
-      ]
-    );
-
-    io.to(shareId).emit("ITEM_ADDED", item);
-  } catch (err) {
-    console.error("❌ ADD_ITEM ERROR", err);
-  }
-});
-
-
-  // =========================
-  // TOGGLE ITEM
-  // =========================
-  socket.on("TOGGLE_ITEM", async ({ shareId, itemId, checked }) => {
-    try {
-      await db.execute(
-        `UPDATE items
-         SET checked = ?, updated_at = ?
-         WHERE id = ? AND list_id = ?`,
-        [checked ? 1 : 0, Date.now(), itemId, shareId]
-      );
-
-      io.to(shareId).emit("ITEM_TOGGLED", { itemId, checked });
-    } catch (err) {
-      console.error("❌ TOGGLE_ITEM ERROR", err);
-    }
-  });
-
-  // =========================
-  // REMOVE ITEM
-  // =========================
-  socket.on("REMOVE_ITEM", async ({ shareId, itemId }) => {
-    try {
-      await db.execute(
-        `DELETE FROM items WHERE id = ? AND list_id = ?`,
-        [itemId, shareId]
-      );
-
-      io.to(shareId).emit("ITEM_REMOVED", { itemId });
-    } catch (err) {
-      console.error("❌ REMOVE_ITEM ERROR", err);
-    }
-  });
+  
 
 
 app.delete('/lists/:shareId/members/:userId', async (req, res) => {
