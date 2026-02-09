@@ -383,13 +383,11 @@ app.get("/lists/:shareId/members-count", async (req, res) => {
 app.put('/lists/:shareId/rename', async (req, res) => {
   try {
     const shareId = req.params.shareId.toUpperCase();
-    const { name } = req.body;
-    const user = req.body?.user;
-if (!user?.id) {
-  return res.status(401).json({ error: "USER_REQUIRED" });
-}
+    const { name, user } = req.body;
 
-
+    /* =========================
+       🔐 USER REQUIS
+    ========================= */
     if (!user?.id) {
       return res.status(401).json({ error: 'USER_REQUIRED' });
     }
@@ -398,7 +396,11 @@ if (!user?.id) {
       return res.status(400).json({ error: 'NAME_REQUIRED' });
     }
 
-    // 🔐 vérifier propriétaire
+    const newName = name.trim();
+
+    /* =========================
+       🔍 VÉRIFIER LISTE & OWNER
+    ========================= */
     const [[list]] = await db.execute(
       `SELECT owner_id FROM lists WHERE id = ?`,
       [shareId]
@@ -412,12 +414,30 @@ if (!user?.id) {
       return res.status(403).json({ error: 'NOT_OWNER' });
     }
 
+    /* =========================
+       ✏️ UPDATE DB
+    ========================= */
     await db.execute(
       `UPDATE lists SET name = ?, updated_at = ? WHERE id = ?`,
-      [name.trim(), Date.now(), shareId]
+      [newName, Date.now(), shareId]
     );
 
-    res.json({ success: true });
+    /* =========================
+       📡 TEMPS RÉEL
+    ========================= */
+io.to(shareId).emit("LIST_RENAMED", {
+  shareId,
+  name: name.trim(),
+});
+
+
+    /* =========================
+       ✅ RÉPONSE
+    ========================= */
+    res.json({
+      success: true,
+      name: newName,
+    });
 
   } catch (err) {
     console.error('❌ RENAME LIST ERROR', err);
