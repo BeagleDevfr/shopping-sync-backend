@@ -597,6 +597,13 @@ socket.on("ADD_ITEM", async ({ shareId, item }) => {
       socket.emit("SNAPSHOT", []);
     }
   });
+
+    // =========================
+  // DISCONNECT
+  // =========================
+  socket.on("disconnect", () => {
+    console.log("❌ Socket déconnecté:", socket.id);
+  });
 });
 
 
@@ -702,12 +709,7 @@ app.delete('/lists/:shareId', async (req, res) => {
 });
 
 
-  // =========================
-  // DISCONNECT
-  // =========================
-  socket.on("disconnect", () => {
-    console.log("❌ Socket déconnecté:", socket.id);
-  });
+
 
 
 
