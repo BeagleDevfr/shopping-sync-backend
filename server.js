@@ -430,9 +430,7 @@ io.to(shareId).emit("LIST_RENAMED", {
   name: name.trim(),
 });
 
-io.to(shareId).emit("LIST_DELETED", {
-  shareId,
-});
+
 
 
     /* =========================
@@ -451,9 +449,7 @@ io.to(shareId).emit("LIST_DELETED", {
 
 // =========================
 // SOCKET EVENTS
-// =========================
-io.on("connection", socket => {
-  console.log("🔌 Socket connecté:", socket.id);
+
 
   // =========================
   // JOIN LIST
@@ -655,6 +651,55 @@ await db.execute(
   }
 });
 
+app.delete('/lists/:shareId', async (req, res) => {
+  try {
+    const shareId = req.params.shareId.toUpperCase();
+    const { user } = req.body;
+
+    /* =========================
+       🔐 USER REQUIS
+    ========================= */
+    if (!user?.id) {
+      return res.status(401).json({ error: 'USER_REQUIRED' });
+    }
+
+    /* =========================
+       🔍 VÉRIFIER LISTE & OWNER
+    ========================= */
+    const [[list]] = await db.execute(
+      `SELECT owner_id FROM lists WHERE id = ?`,
+      [shareId]
+    );
+
+    if (!list) {
+      return res.status(404).json({ error: 'NOT_FOUND' });
+    }
+
+    if (list.owner_id !== user.id) {
+      return res.status(403).json({ error: 'NOT_OWNER' });
+    }
+
+    /* =========================
+       🗑 SUPPRESSION DB
+       (CASCADE : items, members, bans)
+    ========================= */
+    await db.execute(
+      `DELETE FROM lists WHERE id = ?`,
+      [shareId]
+    );
+
+    /* =========================
+       📡 TEMPS RÉEL (ICI 👍)
+    ========================= */
+    io.to(shareId).emit("LIST_DELETED", { shareId });
+
+    res.json({ success: true });
+
+  } catch (err) {
+    console.error('❌ DELETE LIST ERROR', err);
+    res.status(500).json({ error: 'SERVER_ERROR' });
+  }
+});
 
 
   // =========================
@@ -663,7 +708,7 @@ await db.execute(
   socket.on("disconnect", () => {
     console.log("❌ Socket déconnecté:", socket.id);
   });
-});
+
 
 
 
