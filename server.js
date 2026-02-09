@@ -430,6 +430,10 @@ io.to(shareId).emit("LIST_RENAMED", {
   name: name.trim(),
 });
 
+io.to(shareId).emit("LIST_DELETED", {
+  shareId,
+});
+
 
     /* =========================
        ✅ RÉPONSE
