@@ -106,19 +106,14 @@ const io = new Server(server, {
 // MYSQL (FIX CRITIQUE)
 // =========================
 const db = mysql.createPool({
- host: "mysql",
+  host: process.env.MYSQLHOST,
   port: Number(process.env.MYSQLPORT),
   user: process.env.MYSQLUSER,
   password: process.env.MYSQLPASSWORD,
   database: process.env.MYSQLDATABASE,
   waitForConnections: true,
   connectionLimit: 10,
-  queueLimit: 0,
-  connectTimeout: 10000,
-  enableKeepAlive: true,
-  keepAliveInitialDelay: 0,
 });
-
 
 // =========================
 // INIT DB
