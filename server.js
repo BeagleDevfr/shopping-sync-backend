@@ -106,7 +106,7 @@ const io = new Server(server, {
 // MYSQL (FIX CRITIQUE)
 // =========================
 const db = mysql.createPool({
-  host: process.env.MYSQLHOST,
+  host: "mysql",   // ⚠️ IMPORTANT
   port: Number(process.env.MYSQLPORT),
   user: process.env.MYSQLUSER,
   password: process.env.MYSQLPASSWORD,
