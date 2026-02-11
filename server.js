@@ -713,9 +713,25 @@ app.delete('/lists/:shareId', async (req, res) => {
 // =========================
 // START
 // =========================
+
+async function initDbWithRetry(retries = 10, delay = 3000) {
+  for (let i = 1; i <= retries; i++) {
+    try {
+      console.log(`🟡 Tentative DB ${i}/${retries}`);
+      await initDb();
+      return;
+    } catch (err) {
+      console.error("❌ Connexion DB échouée, retry...");
+      if (i === retries) throw err;
+      await new Promise(res => setTimeout(res, delay));
+    }
+  }
+}
+
+
 async function startServer() {
   try {
-    await initDb();
+    await initDbWithRetry();
     console.log("✅ MySQL READY");
 
     server.listen(PORT, "0.0.0.0", () => {
@@ -723,7 +739,7 @@ async function startServer() {
     });
 
   } catch (err) {
-    console.error("❌ DB INIT FAILED", err);
+    console.error("❌ DB INIT FAILED AFTER RETRIES", err);
     process.exit(1);
   }
 }
