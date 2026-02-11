@@ -186,10 +186,6 @@ CREATE TABLE IF NOT EXISTS list_members (
   console.log("✅ MySQL READY");
 }
 
-initDb().catch(err => {
-  console.error("❌ DB INIT FAILED", err);
-  process.exit(1);
-});
 
 // =========================
 // REST API
@@ -717,7 +713,19 @@ app.delete('/lists/:shareId', async (req, res) => {
 // =========================
 // START
 // =========================
-server.listen(PORT, "0.0.0.0", () => {
-  console.log(`🚀 Backend running on port ${PORT}`);
-});
+async function startServer() {
+  try {
+    await initDb();
+    console.log("✅ MySQL READY");
 
+    server.listen(PORT, "0.0.0.0", () => {
+      console.log(`🚀 Backend running on port ${PORT}`);
+    });
+
+  } catch (err) {
+    console.error("❌ DB INIT FAILED", err);
+    process.exit(1);
+  }
+}
+
+startServer();
