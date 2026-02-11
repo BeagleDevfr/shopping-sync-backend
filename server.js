@@ -64,31 +64,29 @@ const ALLOWED_ORIGINS = [
 const app = express();
 app.use(express.json());
 
+// Debug origine (optionnel)
 app.use((req, _res, next) => {
   console.log("🌍 ORIGIN:", req.headers.origin);
   next();
 });
 
-app.use(
-  cors({
-    origin(origin, callback) {
-      if (!origin) return callback(null, true); // mobile / capacitor
-      if (ALLOWED_ORIGINS.includes(origin)) {
-        return callback(null, true);
-      }
-      return callback(new Error("Not allowed by CORS"));
-    },
-    methods: ["GET", "POST", "PUT", "DELETE", "OPTIONS"],
-    allowedHeaders: ["Content-Type", "Authorization"],
-    credentials: true,
-  })
-);
+// =========================
+// ✅ CORS FIX TOTAL
+// =========================
+app.use(cors({
+  origin: true,          // 🔥 accepte automatiquement l'origine appelante
+  credentials: true,     // nécessaire si cookies / auth
+  methods: ["GET", "POST", "PUT", "DELETE", "OPTIONS"],
+  allowedHeaders: ["Content-Type", "Authorization"]
+}));
 
-// 🔥 OBLIGATOIRE POUR LE PREFLIGHT
+// 🔥 Gestion propre du preflight
 app.options("*", cors());
 
+app.get("/", (_req, res) => {
+  res.send("OK");
+});
 
-app.get("/", (_req, res) => res.send("OK"));
 
 const server = http.createServer(app);
 
