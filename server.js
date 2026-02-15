@@ -387,6 +387,28 @@ app.get("/lists/:shareId/members-count", async (req, res) => {
   }
 });
 
+app.delete('/lists/:shareId/leave', async (req, res) => {
+  try {
+    const shareId = req.params.shareId.toUpperCase();
+    const { user } = req.body;
+
+    if (!user?.id) {
+      return res.status(401).json({ error: 'USER_REQUIRED' });
+    }
+
+    await db.execute(
+      `DELETE FROM list_members WHERE list_id = ? AND user_id = ?`,
+      [shareId, user.id]
+    );
+
+    res.json({ success: true });
+  } catch (err) {
+    console.error('❌ LEAVE LIST ERROR', err);
+    res.status(500).json({ error: 'SERVER_ERROR' });
+  }
+});
+
+
 app.put('/lists/:shareId/rename', async (req, res) => {
   try {
     const shareId = req.params.shareId.toUpperCase();
