@@ -23,12 +23,8 @@ function parseAddedBy(value) {
   }
   return null;
 }
-function generateShareId() {
-  return Math.random()
-    .toString(36)
-    .substring(2, 8)
-    .toUpperCase();
-}
+const { customAlphabet } = require('nanoid');
+
 
 const now = () => Date.now();
 const safe = (v, m = 80) =>
@@ -197,7 +193,12 @@ app.post("/lists", async (req, res) => {
       return res.status(400).json({ error: "USER_REQUIRED" });
     }
 
-    const shareId = nanoid(7).toUpperCase();
+    const nano = customAlphabet(
+  'ABCDEFGHJKLMNPQRSTUVWXYZ23456789', // sans 0,O,I,1
+  7
+);
+
+const shareId = nano();
     const ts = Date.now();
 
     // ✅ création de la liste avec propriétaire
