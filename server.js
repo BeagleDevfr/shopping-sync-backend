@@ -36,7 +36,8 @@ const express = require("express");
 const cors = require("cors");
 const http = require("http");
 const { Server } = require("socket.io");
-const { nanoid } = require("nanoid");
+const { nanoid, customAlphabet } = require("nanoid");
+
 const mysql = require("mysql2/promise");
 
 // =========================
