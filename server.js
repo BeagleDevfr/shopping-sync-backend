@@ -197,28 +197,35 @@ app.post("/lists", async (req, res) => {
   'ABCDEFGHJKLMNPQRSTUVWXYZ23456789', // sans 0,O,I,1
   7
 );
+// =========================
+// UPDATE USER PSEUDO
+// =========================
 app.post('/user/update-pseudo', async (req, res) => {
   try {
-    const { userId, pseudo } = req.body;
+    const { id, pseudo } = req.body;
 
-    if (!userId || !pseudo) {
-      return res.status(400).json({ error: 'INVALID' });
+    if (!id || !pseudo) {
+      return res.status(400).json({ error: 'INVALID_DATA' });
     }
 
-    const clean = pseudo.trim().slice(0, 15);
+    const cleanPseudo = pseudo.trim().slice(0, 15);
 
-    // update pseudo partout
+    // 🔁 mettre à jour dans toutes les listes
     await db.execute(
       `UPDATE list_members SET pseudo = ? WHERE user_id = ?`,
-      [clean, userId]
+      [cleanPseudo, id]
     );
 
+    console.log('✏️ Pseudo updated:', cleanPseudo);
+
     res.json({ success: true });
+
   } catch (err) {
     console.error('❌ UPDATE PSEUDO ERROR', err);
     res.status(500).json({ error: 'SERVER_ERROR' });
   }
 });
+
 
 const shareId = nano();
 
