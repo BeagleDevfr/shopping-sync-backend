@@ -23,7 +23,6 @@ function parseAddedBy(value) {
   }
   return null;
 }
-const { customAlphabet } = require('nanoid');
 
 
 const now = () => Date.now();
@@ -199,6 +198,7 @@ app.post("/lists", async (req, res) => {
 );
 
 const shareId = nano();
+
     const ts = Date.now();
 
     // ✅ création de la liste avec propriétaire
@@ -233,6 +233,16 @@ app.post("/lists/:shareId/join", async (req, res) => {
       return res.status(400).json({ error: "NO_USER" });
     }
 
+    // 🚫 CHECK BAN (AJOUTE ÇA)
+    const [[ban]] = await db.execute(
+      `SELECT 1 FROM list_bans WHERE list_id = ? AND user_id = ?`,
+      [shareId, user.id]
+    );
+
+    if (ban) {
+      return res.status(403).json({ error: "BANNED" });
+    }
+
     const now = Date.now();
 
     await db.execute(
@@ -247,6 +257,7 @@ app.post("/lists/:shareId/join", async (req, res) => {
     res.status(500).json({ error: "JOIN_FAILED" });
   }
 });
+
 
 async function ensureListMember(shareId, user) {
   // ✅ sécurité absolue
