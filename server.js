@@ -180,6 +180,35 @@ CREATE TABLE IF NOT EXISTS list_members (
   console.log("✅ MySQL READY");
 }
 
+// =========================
+// UPDATE USER PSEUDO
+// =========================
+app.post('/user/update-pseudo', async (req, res) => {
+  try {
+    const id = req.body.id || req.body.userId;
+    const pseudo = req.body.pseudo;
+
+    if (!id || !pseudo) {
+      return res.status(400).json({ error: 'INVALID_DATA' });
+    }
+
+    const cleanPseudo = pseudo.trim().slice(0, 15);
+
+    await db.execute(
+      `UPDATE list_members SET pseudo = ? WHERE user_id = ?`,
+      [cleanPseudo, id]
+    );
+
+    console.log('✏️ Pseudo updated:', cleanPseudo);
+
+    res.json({ success: true });
+
+  } catch (err) {
+    console.error('❌ UPDATE PSEUDO ERROR', err);
+    res.status(500).json({ error: 'SERVER_ERROR' });
+  }
+});
+
 
 // =========================
 // REST API
@@ -197,34 +226,6 @@ app.post("/lists", async (req, res) => {
   'ABCDEFGHJKLMNPQRSTUVWXYZ23456789', // sans 0,O,I,1
   7
 );
-// =========================
-// UPDATE USER PSEUDO
-// =========================
-app.post('/user/update-pseudo', async (req, res) => {
-  try {
-    const { id, pseudo } = req.body;
-
-    if (!id || !pseudo) {
-      return res.status(400).json({ error: 'INVALID_DATA' });
-    }
-
-    const cleanPseudo = pseudo.trim().slice(0, 15);
-
-    // 🔁 mettre à jour dans toutes les listes
-    await db.execute(
-      `UPDATE list_members SET pseudo = ? WHERE user_id = ?`,
-      [cleanPseudo, id]
-    );
-
-    console.log('✏️ Pseudo updated:', cleanPseudo);
-
-    res.json({ success: true });
-
-  } catch (err) {
-    console.error('❌ UPDATE PSEUDO ERROR', err);
-    res.status(500).json({ error: 'SERVER_ERROR' });
-  }
-});
 
 
 const shareId = nano();
